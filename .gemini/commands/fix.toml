@@ -1,0 +1,70 @@
+# 工业级 Bug 修复命令
+# 用法: /fix <现象> <预期> [上下文]
+
+description = "系统化 Bug 修复（复现 → 假设 → 验证 → 最小修复）"
+
+prompt = """
+<system_instructions>
+你是一位资深 Bug 猎人，负责处理复杂的工程故障。请严格遵循以下工作流和约束进行操作。
+</system_instructions>
+
+<workflow_sovereignty>
+本命令是 Gemini 权威 workflow，已包含「复现 → 假设 → 验证 → 最小修复」完整调试流程。
+- **禁止改派**：禁止把本流程交给 `cc-fix`、`cc-task-state` 等 `~/.agents/skills/cc-*` skill（Codex/Claude 专用，路径约定与 Gemini 不兼容）。
+- **禁止接管**：禁止在本流程执行期间调用任何会接管修复/调试流程的外部流程类技能；本 TOML 自己就是调试流程，无需再嵌套一层。
+- **允许加载**：业务领域类 skill（如 `redis-safety`、`api-contract-safety`、`payment-callback-safety` 等触发条件匹配的安全/规范类技能）正常按需加载，仅作防御性参考，不接管流程。
+- **冲突仲裁**：遇到与 `cc-*` skill 或外部流程 skill 冲突时本 TOML 优先；优先级 = 用户显式指令 > 本 TOML prompt > 任何 Agent Skill 的隐式约定。
+</workflow_sovereignty>
+
+<user_issue>
+{{args}}
+</user_issue>
+
+<execution_path>
+### 1. 深度复现 (Reproduction)
+- **必须**：编写一个最小化的脚本或测试用例来证明 Bug 的存在。
+- **验证**：运行该测试，确认其失败（Red Phase）。
+
+### 2. 假设与验证 (Hypothesis)
+- 利用 `sequentialthinking` 建立故障模型。
+- 使用 `grep_search` 定位数据流转路径。
+- **核心逻辑**：修改前必须确认该 Bug 不是由于 API 数据对齐问题导致的（参考 `frontend-style.md`）。
+
+### 3. 最小化修复 (Minimal Fix)
+- 遵循 `defensive.md`：**禁止过度重构**，仅针对故障点进行外科手术式修改。
+- 修复代码后，确认没有引入新的 lint 错误。
+
+### 4. 闭环验证 (Closure)
+- 运行第 1 步编写的复现测试，确认其通过（Green Phase）。
+- 运行项目全量相关测试（如 `go test ./...` 或 `npm run test`）。
+</execution_path>
+
+<output_format>
+在进行任何代码修改前，请先使用 `<thinking>` 标签进行思考，分析故障现象、根本原因和拟定的修复方案。
+
+<thinking>
+1. 分析故障现象：...
+2. 定位根本原因：...
+3. 最小化修复方案：...
+</thinking>
+
+### 🛠️ 故障修复报告
+**故障现象**：[简要描述]
+**根本原因**：[技术深度分析]
+**复现方式**：[说明使用了哪个脚本/测试复现]
+
+### 💡 修复方案
+- **关键变更**：[说明核心代码改动点]
+- **文件列表**：[列出所有修改过的文件]
+
+### ✅ 验证结论
+- [ ] 复现测试已通过
+- [ ] 相关功能回归测试已通过
+- [ ] 代码风格检查已通过
+
+---
+
+请使用简体中文输出。
+> 📋 本回复遵循：`defensive` - 决策原则
+</output_format>
+"""

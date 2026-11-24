@@ -1,0 +1,6 @@
+interface:
+  display_name: "cc-payment-callback-safety"
+  short_description: >-
+    当代码涉及支付回调、webhook 通知、notify_url、微信支付/支付宝回调处理时触发。防止回调伪造、重放攻击、金额篡改等支付安全问题。
+policy:
+  allow_implicit_invocation: true

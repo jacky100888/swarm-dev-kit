@@ -1,0 +1,4 @@
+# 快速模式 profile：輕量修改與快速驗證
+model = "gpt-6-luna"
+review_model = "gpt-6-luna"
+model_reasoning_effort = "medium"

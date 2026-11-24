@@ -1,0 +1,88 @@
+{
+  "$schema": "https://geminicli.com/schemas/settings.json",
+  "model": {
+    "name": "pro"
+  },
+  "timeout": 120000,
+  "model_aliases": {
+    "pro": "gemini-4-neon",
+    "flash": "gemini-3.8-flash"
+  },
+  "experimental": {},
+  "core": {
+    "checkForUpdates": false,
+    "theme": "Default"
+  },
+  "models": {
+    "previewFeatures": true
+  },
+  "output": {
+    "format": "text"
+  },
+  "tools": {
+    "useRipgrep": true,
+    "truncateLargeToolOutputs": true
+  },
+  "prompts": {
+    "enableAiCompletions": true
+  },
+  "context": {
+    "memorySearchIncludeDirectories": true
+  },
+  "security": {
+    "auth": {
+      "selectedType": "oauth-personal"
+    }
+  },
+  "mcpServers": {
+    "context7": {
+      "httpUrl": "https://mcp.context7.com/mcp",
+      "timeout": 60000,
+      "trust": true
+    },
+    "sequential-thinking": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-sequential-thinking",
+        "--enable-fs-tools",
+        "--enable-code-intel-tools"
+      ],
+      "timeout": 90000,
+      "trust": true
+    },
+    "chrome-dev-tools": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "chrome-devtools-mcp@latest",
+        "--isolated"
+      ],
+      "timeout": 90000
+    }
+  },
+  "general": {
+    "previewFeatures": true,
+    "sessionRetention": {
+      "warningAcknowledged": true,
+      "enabled": true,
+      "maxAge": "30d"
+    },
+    "defaultApprovalMode": "plan",
+    "plan": {
+      "enabled": true
+    }
+  },
+  "ui": {
+    "inlineThinkingMode": "off",
+    "showStatusInTitle": true,
+    "theme": "Default Light",
+    "hideContextSummary": false
+  },
+  "ide": {
+    "hasSeenNudge": true
+  },
+  "agents": {
+    "overrides": {}
+  }
+}

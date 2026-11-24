@@ -1,0 +1,1047 @@
+#!/usr/bin/env bash
+if [ -z "${BASH_VERSION:-}" ]; then
+    exec /usr/bin/env bash "$0" "$@"
+fi
+
+set -euo pipefail
+
+# 同步 .claude、.gemini、.codex、.cursor 和 .github Copilot 配置到用户根目录
+# 说明：Cursor 的 rules 同步为兼容性补充；项目内 .cursor/rules 仍是主路径。
+# 说明：GitHub Copilot 重点同步仓库级 instructions 与 copilot-instructions.md，兼容 coding agent 场景。
+
+# 颜色输出
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+NC='\033[0m'
+
+print_line() {
+    printf '%b\n' "$1"
+}
+
+SCRIPT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+CODEX_MANAGED_START="<!-- swarm-dev-kit codex managed:start -->"
+CODEX_MANAGED_END="<!-- swarm-dev-kit codex managed:end -->"
+CODEX_PROFILE_START="# swarm-dev-kit codex profiles:start"
+CODEX_PROFILE_END="# swarm-dev-kit codex profiles:end"
+SWARM_DEV_KIT_SYNC_TARGETS="${SWARM_DEV_KIT_SYNC_TARGETS:-}"
+SYNC_FAILURES=0
+
+run_sync_section() {
+    local section_name="$1"
+    shift
+
+    if "$@"; then
+        return 0
+    fi
+
+    SYNC_FAILURES=$((SYNC_FAILURES + 1))
+    print_line "${RED}[${section_name}] 同步失败，但脚本会继续后续分段${NC}"
+    return 0
+}
+
+should_sync_target() {
+    local target="$1"
+    local normalized
+
+    [[ -z "$SWARM_DEV_KIT_SYNC_TARGETS" ]] && return 0
+
+    normalized=",${SWARM_DEV_KIT_SYNC_TARGETS// /,},"
+    [[ "$normalized" == *",$target,"* ]]
+}
+
+run_selected_sync_section() {
+    local target="$1"
+    local section_name="$2"
+    shift 2
+
+    if should_sync_target "$target"; then
+        run_sync_section "$section_name" "$@"
+    else
+        print_line "${YELLOW}[${section_name}] 按 SWARM_DEV_KIT_SYNC_TARGETS 跳过${NC}"
+    fi
+}
+
+merge_managed_block() {
+    local src_file="$1"
+    local dst_file="$2"
+    local start_marker="$3"
+    local end_marker="$4"
+    local tmp_file
+
+    tmp_file="$(mktemp)"
+
+    if [[ -f "$dst_file" ]]; then
+        awk -v start="$start_marker" -v end="$end_marker" '
+            $0 == start { skip = 1; next }
+            $0 == end { skip = 0; next }
+            !skip { print }
+        ' "$dst_file" > "$tmp_file"
+    fi
+
+    if [[ -s "$tmp_file" ]]; then
+        printf '\n' >> "$tmp_file"
+    fi
+
+    printf '%s\n' "$start_marker" >> "$tmp_file"
+    cat "$src_file" >> "$tmp_file"
+    if [[ -s "$src_file" && -n "$(tail -c 1 "$src_file" 2>/dev/null)" ]]; then
+        printf '\n' >> "$tmp_file"
+    fi
+    printf '%s\n' "$end_marker" >> "$tmp_file"
+
+    mv "$tmp_file" "$dst_file"
+}
+
+remove_managed_block() {
+    local dst_file="$1"
+    local start_marker="$2"
+    local end_marker="$3"
+    local tmp_file
+
+    [[ -f "$dst_file" ]] || return 0
+
+    tmp_file="$(mktemp)"
+    awk -v start="$start_marker" -v end="$end_marker" '
+        $0 == start { skip = 1; next }
+        $0 == end { skip = 0; next }
+        !skip { print }
+    ' "$dst_file" > "$tmp_file"
+
+    if cmp -s "$dst_file" "$tmp_file"; then
+        rm -f "$tmp_file"
+        return 0
+    fi
+
+    mv "$tmp_file" "$dst_file"
+    print_line "${YELLOW}  已移除 ~/.codex/config.toml 中旧式 profiles 受管区块${NC}"
+}
+
+sync_managed_codex_profiles() {
+    local src_dir="$1"
+    local dst_dir="$2"
+    local config_file="$3"
+    local manifest_file="$dst_dir/.swarm-dev-kit-profiles"
+    local new_manifest
+    local profile_file
+    local profile_list
+    local profile_name
+    local profile_target
+    local profile_names
+
+    CODEX_PROFILES_SYNCED=0
+    mkdir -p "$dst_dir"
+    new_manifest="$(mktemp)"
+    profile_list="$(mktemp)"
+    profile_names="$(mktemp)"
+
+    find "$src_dir" -maxdepth 1 -type f -name '*.toml' | LC_ALL=C sort > "$profile_list"
+
+    while IFS= read -r profile_file; do
+        [[ -n "$profile_file" ]] || continue
+        profile_name="$(basename "$profile_file" .toml)"
+        profile_target="${profile_name}.config.toml"
+
+        if [[ ! "$profile_name" =~ ^[A-Za-z0-9_-]+$ ]]; then
+            print_line "${RED}  profile 文件名非法: ${profile_name}${NC}"
+            rm -f "$new_manifest" "$profile_list" "$profile_names"
+            return 1
+        fi
+
+        if grep -Eq '^[[:space:]]*\[profiles\.' "$profile_file"; then
+            print_line "${RED}  profile 仍使用旧式 [profiles.*] 表: ${profile_file}${NC}"
+            rm -f "$new_manifest" "$profile_list" "$profile_names"
+            return 1
+        fi
+
+        validate_toml_file "$profile_file"
+        cp "$profile_file" "$dst_dir/$profile_target"
+        printf '%s\n' "$profile_target" >> "$new_manifest"
+        printf '%s\n' "$profile_name" >> "$profile_names"
+        CODEX_PROFILES_SYNCED=$((CODEX_PROFILES_SYNCED + 1))
+    done < "$profile_list"
+
+    if [[ -f "$manifest_file" ]]; then
+        while IFS= read -r profile_target; do
+            [[ -n "$profile_target" ]] || continue
+            if ! grep -Fxq "$profile_target" "$new_manifest"; then
+                rm -f "$dst_dir/$profile_target"
+            fi
+        done < "$manifest_file"
+    fi
+
+    mv "$new_manifest" "$manifest_file"
+    remove_managed_block "$config_file" "$CODEX_PROFILE_START" "$CODEX_PROFILE_END"
+    remove_conflicting_profile_tables "$config_file" "$profile_names"
+    rm -f "$profile_list" "$profile_names"
+}
+
+remove_conflicting_profile_tables() {
+    local config_file="$1"
+    local names_file="$2"
+    local tmp_file
+
+    [[ -f "$config_file" && -s "$names_file" ]] || return 0
+
+    tmp_file="$(mktemp)"
+
+    awk -v names_file="$names_file" '
+        BEGIN {
+            while ((getline profile_name < names_file) > 0) {
+                managed_profiles[profile_name] = 1
+            }
+        }
+
+        function codex_profile_name(line, profile_name) {
+            profile_name = line
+            if (profile_name ~ /^\[profiles\."[^"]+"\][[:space:]]*$/) {
+                sub(/^\[profiles\."/, "", profile_name)
+                sub(/"\][[:space:]]*$/, "", profile_name)
+                return profile_name
+            }
+            if (profile_name ~ /^\[profiles\.[A-Za-z0-9_-]+\][[:space:]]*$/) {
+                sub(/^\[profiles\./, "", profile_name)
+                sub(/\][[:space:]]*$/, "", profile_name)
+                return profile_name
+            }
+            return ""
+        }
+
+        /^\[/ {
+            current_profile = codex_profile_name($0)
+            skip_table = current_profile != "" && current_profile in managed_profiles
+        }
+
+        !skip_table { print }
+    ' "$config_file" > "$tmp_file"
+
+    if cmp -s "$config_file" "$tmp_file"; then
+        rm -f "$tmp_file"
+        return 0
+    fi
+
+    cp "$config_file" "${config_file}.swarm-dev-kit.bak"
+    mv "$tmp_file" "$config_file"
+    print_line "${YELLOW}  已移除 ~/.codex/config.toml 中同名旧 profile，并备份到 config.toml.swarm-dev-kit.bak${NC}"
+}
+
+validate_toml_file() {
+    local toml_file="$1"
+
+    if ! command -v python3 &>/dev/null; then
+        return 0
+    fi
+
+    python3 - "$toml_file" <<'PY'
+import sys
+
+try:
+    import tomllib
+except ModuleNotFoundError:
+    sys.exit(0)
+
+with open(sys.argv[1], "rb") as toml_file:
+    tomllib.load(toml_file)
+PY
+}
+
+sync_managed_rules() {
+    local src_dir="$1"
+    local dst_dir="$2"
+    local manifest_file="$dst_dir/.swarm-dev-kit-managed"
+    local new_manifest
+    local rule_file
+    local rule_name
+    local rule_list
+
+    CODEX_RULES_SYNCED=0
+    mkdir -p "$dst_dir"
+    new_manifest="$(mktemp)"
+    rule_list="$(mktemp)"
+
+    find "$src_dir" -maxdepth 1 -type f -name '*.rules' | LC_ALL=C sort > "$rule_list"
+
+    while IFS= read -r rule_file; do
+        [[ -n "$rule_file" ]] || continue
+        rule_name="$(basename "$rule_file")"
+        printf '%s\n' "$rule_name" >> "$new_manifest"
+        cp "$rule_file" "$dst_dir/$rule_name"
+        CODEX_RULES_SYNCED=$((CODEX_RULES_SYNCED + 1))
+    done < "$rule_list"
+
+    rm -f "$rule_list"
+
+    if [[ -f "$manifest_file" ]]; then
+        while IFS= read -r rule_name; do
+            [[ -n "$rule_name" ]] || continue
+            if ! grep -Fxq "$rule_name" "$new_manifest"; then
+                rm -f "$dst_dir/$rule_name"
+            fi
+        done < "$manifest_file"
+    fi
+
+    mv "$new_manifest" "$manifest_file"
+}
+
+sync_managed_instruction_files() {
+    local src_dir="$1"
+    local dst_dir="$2"
+    local manifest_file="$dst_dir/.swarm-dev-kit-managed"
+    local new_manifest
+    local instruction_file
+    local instruction_name
+    local instruction_list
+
+    CODEX_INSTRUCTIONS_SYNCED=0
+    mkdir -p "$dst_dir"
+    new_manifest="$(mktemp)"
+    instruction_list="$(mktemp)"
+
+    find "$src_dir" -maxdepth 1 -type f -name '*.md' | LC_ALL=C sort > "$instruction_list"
+
+    while IFS= read -r instruction_file; do
+        [[ -n "$instruction_file" ]] || continue
+        instruction_name="$(basename "$instruction_file")"
+        printf '%s\n' "$instruction_name" >> "$new_manifest"
+        cp "$instruction_file" "$dst_dir/$instruction_name"
+        CODEX_INSTRUCTIONS_SYNCED=$((CODEX_INSTRUCTIONS_SYNCED + 1))
+    done < "$instruction_list"
+
+    rm -f "$instruction_list"
+
+    if [[ -f "$manifest_file" ]]; then
+        while IFS= read -r instruction_name; do
+            [[ -n "$instruction_name" ]] || continue
+            if ! grep -Fxq "$instruction_name" "$new_manifest"; then
+                rm -f "$dst_dir/$instruction_name"
+            fi
+        done < "$manifest_file"
+    fi
+
+    mv "$new_manifest" "$manifest_file"
+}
+
+sync_managed_skills() {
+    local src_dir="$1"
+    local dst_dir="$2"
+    local manifest_file="$dst_dir/.swarm-dev-kit-managed"
+    local new_manifest
+    local skill_dir
+    local skill_name
+    local skill_list
+
+    CODEX_SKILLS_SYNCED=0
+    mkdir -p "$dst_dir"
+    new_manifest="$(mktemp)"
+    skill_list="$(mktemp)"
+
+    find "$src_dir" -mindepth 1 -maxdepth 1 -type d | LC_ALL=C sort > "$skill_list"
+
+    while IFS= read -r skill_dir; do
+        [[ -n "$skill_dir" ]] || continue
+        skill_name="$(basename "$skill_dir")"
+        printf '%s\n' "$skill_name" >> "$new_manifest"
+        rm -rf "$dst_dir/$skill_name"
+        cp -R "$skill_dir" "$dst_dir/$skill_name"
+        CODEX_SKILLS_SYNCED=$((CODEX_SKILLS_SYNCED + 1))
+    done < "$skill_list"
+
+    rm -f "$skill_list"
+
+    if [[ -f "$manifest_file" ]]; then
+        while IFS= read -r skill_name; do
+            [[ -n "$skill_name" ]] || continue
+            if ! grep -Fxq "$skill_name" "$new_manifest"; then
+                rm -rf "$dst_dir/$skill_name"
+            fi
+        done < "$manifest_file"
+    fi
+
+    mv "$new_manifest" "$manifest_file"
+}
+
+sync_managed_optional_tree() {
+    local src_dir="$1"
+    local dst_dir="$2"
+    local manifest_file="$dst_dir/.swarm-dev-kit-managed"
+    local new_manifest
+    local rel_path
+    local path_list
+
+    mkdir -p "$dst_dir"
+    new_manifest="$(mktemp)"
+    path_list="$(mktemp)"
+
+    if [[ -d "$src_dir" ]]; then
+        find "$src_dir" -mindepth 1 \( -type f -o -type d \) | sed "s#^$src_dir/##" | LC_ALL=C sort > "$path_list"
+
+        while IFS= read -r rel_path; do
+            [[ -n "$rel_path" ]] || continue
+            printf '%s\n' "$rel_path" >> "$new_manifest"
+
+            if [[ -d "$src_dir/$rel_path" ]]; then
+                mkdir -p "$dst_dir/$rel_path"
+                continue
+            fi
+
+            mkdir -p "$(dirname "$dst_dir/$rel_path")"
+            cp "$src_dir/$rel_path" "$dst_dir/$rel_path"
+        done < "$path_list"
+    fi
+
+    if [[ -f "$manifest_file" ]]; then
+        while IFS= read -r rel_path; do
+            [[ -n "$rel_path" ]] || continue
+            if ! grep -Fxq "$rel_path" "$new_manifest"; then
+                rm -rf "$dst_dir/$rel_path"
+            fi
+        done < "$manifest_file"
+    fi
+
+    rm -f "$path_list"
+    mv "$new_manifest" "$manifest_file"
+}
+
+sync_codex_tasks_skeleton() {
+    local src_dir="$1"
+    local dst_dir="$2"
+    local manifest_file="$dst_dir/.swarm-dev-kit-managed"
+    local new_manifest
+    local rel_path
+
+    mkdir -p "$dst_dir/archived"
+    new_manifest="$(mktemp)"
+
+    for rel_path in ".gitkeep" "archived/.gitkeep"; do
+        if [[ -f "$src_dir/$rel_path" ]]; then
+            mkdir -p "$(dirname "$dst_dir/$rel_path")"
+            cp "$src_dir/$rel_path" "$dst_dir/$rel_path"
+            printf '%s\n' "$rel_path" >> "$new_manifest"
+        fi
+    done
+
+    if [[ -f "$manifest_file" ]]; then
+        while IFS= read -r rel_path; do
+            [[ -n "$rel_path" ]] || continue
+            if ! grep -Fxq "$rel_path" "$new_manifest" && [[ -f "$dst_dir/$rel_path" ]]; then
+                rm -f "$dst_dir/$rel_path"
+            fi
+        done < "$manifest_file"
+    fi
+
+    mv "$new_manifest" "$manifest_file"
+}
+
+sync_codex_project_skeleton() {
+    local dst_dir="${HOME}/.codex/project-template"
+
+    mkdir -p "$dst_dir/.codex/tasks/archived" "$dst_dir/.codex/templates"
+    cp "${SCRIPT_DIR}/.codex/tasks/.gitkeep" "$dst_dir/.codex/tasks/.gitkeep"
+    cp "${SCRIPT_DIR}/.codex/tasks/archived/.gitkeep" "$dst_dir/.codex/tasks/archived/.gitkeep"
+    cp "${SCRIPT_DIR}/.codex/templates/.gitkeep" "$dst_dir/.codex/templates/.gitkeep"
+}
+
+print_line "${GREEN}=== 配置同步工具 ===${NC}"
+print_line "源目录: ${SCRIPT_DIR}"
+print_line "目标目录: ${HOME}"
+printf '\n'
+
+sync_claude_code() {
+    if [[ ! -d "${SCRIPT_DIR}/.claude" ]]; then
+        print_line "${YELLOW}[Claude Code] 源目录不存在，跳过${NC}"
+        return 0
+    fi
+
+    print_line "${GREEN}[Claude Code] 开始同步${NC}"
+
+    # 确保目标目录存在
+    mkdir -p ~/.claude
+
+    # 删除旧配置目录（保留历史记录、projects 等）
+    rm -rf ~/.claude/rules ~/.claude/skills ~/.claude/commands ~/.claude/templates ~/.claude/tasks ~/.claude/tools
+    print_line "${YELLOW}  已清理旧配置目录${NC}"
+
+    # 复制配置目录
+    cp -r "${SCRIPT_DIR}/.claude/rules" ~/.claude/
+    cp -r "${SCRIPT_DIR}/.claude/skills" ~/.claude/
+    cp -r "${SCRIPT_DIR}/.claude/commands" ~/.claude/
+    cp -r "${SCRIPT_DIR}/.claude/templates" ~/.claude/
+    cp -r "${SCRIPT_DIR}/.claude/tasks" ~/.claude/
+    [[ -d "${SCRIPT_DIR}/.claude/tools" ]] && cp -r "${SCRIPT_DIR}/.claude/tools" ~/.claude/
+    if [[ -d "${SCRIPT_DIR}/.claude/hooks" ]]; then
+        rm -rf ~/.claude/hooks
+        cp -r "${SCRIPT_DIR}/.claude/hooks" ~/.claude/
+        chmod +x ~/.claude/hooks/*.py 2>/dev/null || true
+    fi
+    cp "${SCRIPT_DIR}/.claude/CLAUDE.md" ~/.claude/
+
+    # 無損合併安全攔截 PreToolUse Hook 到 ~/.claude/settings.json
+    if command -v python3 &>/dev/null && [[ -f "${HOME}/.claude/hooks/guard-dangerous-ops.py" ]]; then
+        python3 - "${HOME}/.claude/settings.json" "${HOME}/.claude/hooks/guard-dangerous-ops.py" << "PYEOF"
+import json, sys
+from pathlib import Path
+
+settings_path = Path(sys.argv[1])
+hook_script = sys.argv[2]
+data = {}
+if settings_path.exists():
+    try:
+        data = json.loads(settings_path.read_text(encoding="utf-8"))
+    except Exception:
+        data = {}
+
+hooks = data.setdefault("hooks", {})
+pre_list = hooks.setdefault("PreToolUse", [])
+guard_cmd = f"python3 \"{hook_script}\" --claude"
+
+exists = False
+for entry in pre_list:
+    for h in entry.get("hooks", []):
+        if "guard-dangerous-ops.py" in str(h.get("command", "")):
+            h["command"] = guard_cmd
+            h["timeout"] = 5
+            entry["matcher"] = "Bash|Write|Edit|MultiEdit|NotebookEdit"
+            exists = True
+
+if not exists:
+    pre_list.insert(0, {
+        "matcher": "Bash|Write|Edit|MultiEdit|NotebookEdit",
+        "hooks": [
+            {
+                "type": "command",
+                "command": guard_cmd,
+                "timeout": 5
+            }
+        ]
+    })
+
+settings_path.write_text(json.dumps(data, ensure_ascii=False, indent=2) + chr(10), encoding="utf-8")
+PYEOF
+        print_line "${GREEN}  ✓ hooks/ 安全攔截 PreToolUse Hook 已無損合併至 ~/.claude/settings.json${NC}"
+    fi
+
+    print_line "${GREEN}  ✓ rules/ skills/ commands/ templates/ tasks/ tools/ hooks/ CLAUDE.md${NC}"
+
+    # --- Claude Code 插件检测 ---
+    PLUGIN_JSON="${SCRIPT_DIR}/.claude/plugins.json"
+    INSTALLED_JSON="${HOME}/.claude/plugins/installed_plugins.json"
+    if ! command -v claude &>/dev/null; then
+        printf '\n'
+        print_line "${YELLOW}[Claude Code] 未检测到 claude 命令，跳过插件检测${NC}"
+        print_line "${YELLOW}  安装方式: npm install -g @anthropic-ai/claude-code${NC}"
+    elif ! command -v python3 &>/dev/null; then
+        printf '\n'
+        print_line "${YELLOW}[Claude Code] 未检测到 python3，跳过插件检测${NC}"
+        print_line "${YELLOW}  插件检测需要 python3 解析 JSON，请安装后重试${NC}"
+        print_line "${YELLOW}  macOS: brew install python3 | Ubuntu: sudo apt install python3${NC}"
+    elif [[ -f "$PLUGIN_JSON" ]]; then
+        printf '\n'
+        print_line "${YELLOW}[Claude Code] 正在检测推荐插件...${NC}"
+
+        # 使用 python3 解析 JSON 检查缺失插件
+        MISSING_PLUGINS=$(python3 -c "
+import json, sys
+try:
+    with open(sys.argv[1]) as f:
+        recommended = json.load(f)
+    installed = {}
+    try:
+        with open(sys.argv[2]) as f:
+            installed = json.load(f).get('plugins', {})
+    except (FileNotFoundError, json.JSONDecodeError):
+        pass
+    for p in recommended.get('recommendations', []):
+        key = p['id'] + '@' + p['marketplace']
+        if key not in installed:
+            print(p['id'] + '|' + p['name'] + '|' + p['marketplace'])
+except Exception:
+    pass
+" "$PLUGIN_JSON" "$INSTALLED_JSON")
+
+        if [[ -n "$MISSING_PLUGINS" ]]; then
+            print_line "${YELLOW}检测到以下推荐插件尚未安装：${NC}"
+            IFS=$'\n'
+            for item in $MISSING_PLUGINS; do
+                IFS='|' read -r id name marketplace <<< "$item"
+                print_line "  - ${YELLOW}$name${NC} ($id)"
+            done
+
+            printf '\n'
+            read -p "是否现在安装上述缺失的插件？[Y/n] " confirm
+            if [[ "$confirm" =~ ^[Yy]$ || "$confirm" == "" ]]; then
+                IFS=$'\n'
+                for item in $MISSING_PLUGINS; do
+                    IFS='|' read -r id name marketplace <<< "$item"
+                    print_line "${GREEN}正在安装 $name...${NC}"
+                    INSTALL_OUTPUT=$(claude plugin install "${id}@${marketplace}" 2>&1) || {
+                        if echo "$INSTALL_OUTPUT" | grep -qi "auth\|login\|token\|credential\|unauthorized\|forbidden"; then
+                            print_line "${RED}错误: Claude Code 未认证，请先运行 'claude login' 登录${NC}"
+                            break
+                        elif echo "$INSTALL_OUTPUT" | grep -qi "already installed\|already exists"; then
+                            print_line "${YELLOW}  $name 已安装，跳过${NC}"
+                        else
+                            print_line "${YELLOW}警告: $name 安装失败 — $INSTALL_OUTPUT${NC}"
+                        fi
+                    }
+                done
+                print_line "${GREEN}✓ 插件安装完成${NC}"
+            else
+                print_line "${YELLOW}已跳过插件安装。你可以之后手动安装。${NC}"
+            fi
+        else
+            print_line "${GREEN}✓ 所有推荐插件已安装${NC}"
+        fi
+    fi
+
+    return 0
+}
+
+sync_antigravity_cli() {
+    if [[ ! -d "${SCRIPT_DIR}/.antigravity" ]]; then
+        print_line "${YELLOW}[Antigravity CLI] 源目录不存在，跳过${NC}"
+        return 0
+    fi
+
+    print_line "${GREEN}[Antigravity CLI] 开始同步${NC}"
+
+    # 确保目标目录存在
+    mkdir -p ~/.gemini/config ~/.gemini/config/skills
+
+    # 复制配置
+    cp -r "${SCRIPT_DIR}/.antigravity/skills" ~/.gemini/config/
+    if [[ -d "${SCRIPT_DIR}/.antigravity/rules" ]]; then
+        cp -r "${SCRIPT_DIR}/.antigravity/rules" ~/.gemini/config/
+    fi
+    if [[ -f "${SCRIPT_DIR}/.antigravity/AGENTS.md" ]]; then
+        cp "${SCRIPT_DIR}/.antigravity/AGENTS.md" ~/.gemini/config/AGENTS.md
+    fi
+
+    print_line "${GREEN}  ✓ rules/ skills/ AGENTS.md 同步到 ~/.gemini/config/${NC}"
+    return 0
+}
+
+sync_gemini_cli() {
+    if [[ ! -d "${SCRIPT_DIR}/.gemini" ]]; then
+        print_line "${YELLOW}[Gemini CLI] 源目录不存在，跳过${NC}"
+        return 0
+    fi
+
+    print_line "${GREEN}[Gemini CLI] 开始同步${NC}"
+
+    # 确保目标目录存在
+    mkdir -p ~/.gemini
+
+    # 删除旧配置目录（保留认证信息）
+    rm -rf ~/.gemini/commands ~/.gemini/skills ~/.gemini/rules ~/.gemini/policies
+    print_line "${YELLOW}  已清理旧配置目录${NC}"
+
+    # 确保目标目录存在
+    mkdir -p ~/.gemini/policies
+
+    # 复制配置
+    cp -r "${SCRIPT_DIR}/.gemini/commands" ~/.gemini/
+    cp -r "${SCRIPT_DIR}/.gemini/skills" ~/.gemini/
+    cp -r "${SCRIPT_DIR}/.gemini/rules" ~/.gemini/
+    cp "${SCRIPT_DIR}/.gemini/GEMINI.md" ~/.gemini/
+    if command -v python3 &>/dev/null && [[ -f "${HOME}/.gemini/settings.json" ]]; then
+        python3 - "${SCRIPT_DIR}/.gemini/settings.json" "${HOME}/.gemini/settings.json" << "PYEOF"
+import json, sys
+from pathlib import Path
+
+src = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+dst_path = Path(sys.argv[2])
+try:
+    old = json.loads(dst_path.read_text(encoding="utf-8"))
+except Exception:
+    old = {}
+
+# Preserve user-added custom mcpServers (e.g. codegraph) while updating core settings
+old_mcps = old.get("mcpServers", {})
+new_mcps = src.setdefault("mcpServers", {})
+for k, v in old_mcps.items():
+    if k not in new_mcps:
+        new_mcps[k] = v
+
+dst_path.write_text(json.dumps(src, ensure_ascii=False, indent=2) + chr(10), encoding="utf-8")
+PYEOF
+    else
+        cp "${SCRIPT_DIR}/.gemini/settings.json" ~/.gemini/
+    fi
+
+    # 策略同步逻辑：最新规范要求使用 policies 目录
+    if [[ -d "${SCRIPT_DIR}/.gemini/policies" ]]; then
+        cp -r "${SCRIPT_DIR}/.gemini/policies/"* ~/.gemini/policies/
+    fi
+    # 清理旧的全局策略文件以防冲突
+    [ -f "${HOME}/.gemini/policy.toml" ] && rm "${HOME}/.gemini/policy.toml"
+    if [[ -f "${HOME}/.gemini/policy.json" ]]; then
+        mv "${HOME}/.gemini/policy.json" "${HOME}/.gemini/policy.json.bak_$(date +%F)"
+    fi
+
+    print_line "${GREEN}  ✓ commands/ skills/ rules/ policies/ GEMINI.md settings.json${NC}"
+
+    # --- MCP 扩展检测 ---
+    EXT_JSON="${SCRIPT_DIR}/.gemini/extensions.json"
+    if ! command -v gemini &>/dev/null; then
+        printf '\n'
+        print_line "${YELLOW}[Gemini CLI] 未检测到 gemini 命令，跳过扩展检测${NC}"
+        print_line "${YELLOW}  安装方式: brew install gemini-cli (详见 README)${NC}"
+    elif ! command -v python3 &>/dev/null; then
+        printf '\n'
+        print_line "${YELLOW}[Gemini CLI] 未检测到 python3，跳过扩展检测${NC}"
+        print_line "${YELLOW}  扩展检测需要 python3 解析 JSON，请安装后重试${NC}"
+        print_line "${YELLOW}  macOS: brew install python3 | Ubuntu: sudo apt install python3${NC}"
+    elif [[ -f "$EXT_JSON" ]]; then
+        printf '\n'
+        print_line "${YELLOW}[Gemini CLI] 正在检测推荐扩展...${NC}"
+
+        # 获取当前已安装的扩展列表（gemini extensions list 输出走 stderr）
+        INSTALLED_EXTS=$(gemini extensions list 2>&1 || echo "")
+
+        # 使用 python3 解析 JSON 并检查缺失
+        # 优化匹配逻辑：检查 id 是否作为独立单词出现在已安装列表中
+        MISSING_EXTS=$(python3 -c "
+import json, sys, re
+try:
+    with open(sys.argv[1]) as f:
+        data = json.load(f)
+    installed = sys.argv[2]
+    for ext in data.get('recommendations', []):
+        # 使用正则确保是完整匹配 ID
+        if not re.search(r'\b' + re.escape(ext['id']) + r'\b', installed):
+            print(ext['id'] + '|' + ext['name'] + '|' + ext['url'])
+except Exception:
+    pass
+" "$EXT_JSON" "$INSTALLED_EXTS")
+
+        if [[ -n "$MISSING_EXTS" ]]; then
+            print_line "${YELLOW}检测到以下推荐扩展尚未安装：${NC}"
+            IFS=$'\n'
+            for item in $MISSING_EXTS; do
+                IFS='|' read -r id name url <<< "$item"
+                print_line "  - ${YELLOW}$name${NC} ($id)"
+            done
+
+            printf '\n'
+            read -p "是否现在安装上述缺失的扩展？[Y/n] " confirm
+            if [[ "$confirm" =~ ^[Yy]$ || "$confirm" == "" ]]; then
+                IFS=$'\n'
+                for item in $MISSING_EXTS; do
+                    IFS='|' read -r id name url <<< "$item"
+                    print_line "${GREEN}正在安装 $name...${NC}"
+                    INSTALL_OUTPUT=$(gemini extensions install "$url" 2>&1) || {
+                        if echo "$INSTALL_OUTPUT" | grep -qi "auth\|login\|token\|credential\|unauthorized\|forbidden"; then
+                            print_line "${RED}错误: Gemini CLI 未认证，请先运行 'gemini auth login' 登录${NC}"
+                            break
+                        elif echo "$INSTALL_OUTPUT" | grep -qi "already installed\|already exists"; then
+                            print_line "${YELLOW}  $name 已安装，跳过${NC}"
+                        else
+                            print_line "${YELLOW}警告: $name 安装失败 — $INSTALL_OUTPUT${NC}"
+                        fi
+                    }
+                done
+                print_line "${GREEN}✓ 扩展安装完成${NC}"
+            else
+                print_line "${YELLOW}已跳过扩展安装。你可以之后手动安装。${NC}"
+            fi
+        else
+            print_line "${GREEN}✓ 所有推荐扩展已安装${NC}"
+        fi
+    fi
+
+    return 0
+}
+
+sync_codex() {
+    if [[ ! -d "${SCRIPT_DIR}/.codex" ]]; then
+        print_line "${YELLOW}[Codex] 源目录不存在，跳过${NC}"
+        return 0
+    fi
+
+    print_line "${GREEN}[Codex] 开始同步${NC}"
+
+    mkdir -p ~/.codex ~/.codex/rules ~/.codex/instructions ~/.codex/templates ~/.codex/tasks ~/.codex/tasks/archived ~/.agents/skills
+
+    CODEX_RULES_SYNCED=0
+    CODEX_INSTRUCTIONS_SYNCED=0
+    CODEX_SKILLS_SYNCED=0
+
+    CODEX_AGENTS_SRC="${SCRIPT_DIR}/.codex/global/AGENTS.md"
+    CODEX_AGENTS_DST="${HOME}/.codex/AGENTS.md"
+    CODEX_RULES_SRC="${SCRIPT_DIR}/.codex/global/rules"
+    CODEX_INSTRUCTIONS_SRC="${SCRIPT_DIR}/.codex/instructions"
+    CODEX_SKILLS_SRC="${SCRIPT_DIR}/.codex/skills"
+    CODEX_TEMPLATES_SRC="${SCRIPT_DIR}/.codex/templates"
+    CODEX_TEMPLATES_DST="${HOME}/.codex/templates"
+    CODEX_TASKS_SRC="${SCRIPT_DIR}/.codex/tasks"
+    CODEX_TASKS_DST="${HOME}/.codex/tasks"
+
+    if [[ -f "$CODEX_AGENTS_SRC" ]]; then
+        merge_managed_block "$CODEX_AGENTS_SRC" "$CODEX_AGENTS_DST" "$CODEX_MANAGED_START" "$CODEX_MANAGED_END"
+        print_line "${GREEN}  ✓ 已合并 ~/.codex/AGENTS.md 受管区块${NC}"
+    else
+        print_line "${YELLOW}  未找到 global/AGENTS.md，跳过 AGENTS 同步${NC}"
+    fi
+
+    if [[ -d "$CODEX_RULES_SRC" ]]; then
+        sync_managed_rules "$CODEX_RULES_SRC" "${HOME}/.codex/rules"
+    fi
+
+    if [[ -d "$CODEX_INSTRUCTIONS_SRC" ]]; then
+        sync_managed_instruction_files "$CODEX_INSTRUCTIONS_SRC" "${HOME}/.codex/instructions"
+    fi
+
+    if [[ -d "$CODEX_SKILLS_SRC" ]]; then
+        sync_managed_skills "$CODEX_SKILLS_SRC" "${HOME}/.agents/skills"
+    fi
+
+    if [[ -d "$CODEX_TEMPLATES_SRC" ]]; then
+        sync_managed_optional_tree "$CODEX_TEMPLATES_SRC" "$CODEX_TEMPLATES_DST"
+    fi
+
+    if [[ -d "$CODEX_TASKS_SRC" ]]; then
+        sync_codex_tasks_skeleton "$CODEX_TASKS_SRC" "$CODEX_TASKS_DST"
+    fi
+
+    sync_codex_project_skeleton
+
+    CODEX_PROFILES_SRC="${SCRIPT_DIR}/.codex/profiles"
+    CODEX_CONFIG_DST="${HOME}/.codex/config.toml"
+    CODEX_PROFILES_SYNCED=0
+
+    if [[ -d "$CODEX_PROFILES_SRC" ]]; then
+        sync_managed_codex_profiles "$CODEX_PROFILES_SRC" "${HOME}/.codex" "$CODEX_CONFIG_DST"
+        print_line "${GREEN}  ✓ profiles: ${CODEX_PROFILES_SYNCED} 个，同步到 ~/.codex/*.config.toml${NC}"
+    else
+        print_line "${YELLOW}  未找到 profiles/，跳过 profile 同步${NC}"
+    fi
+
+    print_line "${GREEN}  ✓ rules: ${CODEX_RULES_SYNCED} 个，同步到 ~/.codex/rules/${NC}"
+    print_line "${GREEN}  ✓ instructions: ${CODEX_INSTRUCTIONS_SYNCED} 个，同步到 ~/.codex/instructions/${NC}"
+    print_line "${GREEN}  ✓ skills: ${CODEX_SKILLS_SYNCED} 个，同步到 ~/.agents/skills/${NC}"
+    print_line "${GREEN}  ✓ templates/tasks 目录骨架已同步到 ~/.codex/${NC}"
+    print_line "${GREEN}  ✓ 项目 .codex 骨架模板已同步到 ~/.codex/project-template/${NC}"
+    print_line "${YELLOW}  已保留 ~/.codex 运行态文件（auth/history/logs/cache）${NC}"
+    printf '\n'
+    print_line "${YELLOW}[Codex] 若要在其他项目中持久化任务，请在目标项目根目录执行 \$project-init、\$project-scan 或 \$cc-new-feature${NC}"
+    return 0
+}
+
+sync_github_copilot() {
+    if [[ ! -d "${SCRIPT_DIR}/.github" ]]; then
+        print_line "${YELLOW}[GitHub Copilot] 源目录不存在，跳过${NC}"
+        return 0
+    fi
+
+    print_line "${GREEN}[GitHub Copilot] 开始同步${NC}"
+
+    mkdir -p ~/.github ~/.github/instructions
+
+    COPILOT_INSTRUCTIONS_SYNCED=0
+    COPILOT_INSTRUCTIONS_SRC="${SCRIPT_DIR}/.github/instructions"
+    COPILOT_INSTRUCTIONS_DST="${HOME}/.github/instructions"
+    COPILOT_COPILOT_FILE_SRC="${SCRIPT_DIR}/.github/copilot-instructions.md"
+    COPILOT_COPILOT_FILE_DST="${HOME}/.github/copilot-instructions.md"
+    COPILOT_AGENTS_SRC="${SCRIPT_DIR}/AGENTS.md"
+    COPILOT_AGENTS_DST="${HOME}/.github/AGENTS.md"
+
+    if [[ -d "$COPILOT_INSTRUCTIONS_SRC" ]]; then
+        sync_managed_instruction_files "$COPILOT_INSTRUCTIONS_SRC" "$COPILOT_INSTRUCTIONS_DST"
+        COPILOT_INSTRUCTIONS_SYNCED=$CODEX_INSTRUCTIONS_SYNCED
+    fi
+
+    if [[ -f "$COPILOT_COPILOT_FILE_SRC" ]]; then
+        cp "$COPILOT_COPILOT_FILE_SRC" "$COPILOT_COPILOT_FILE_DST"
+        print_line "${GREEN}  ✓ copilot-instructions.md${NC}"
+    else
+        print_line "${YELLOW}  未找到 .github/copilot-instructions.md，跳过${NC}"
+    fi
+
+    if [[ -f "$COPILOT_AGENTS_SRC" ]]; then
+        cp "$COPILOT_AGENTS_SRC" "$COPILOT_AGENTS_DST"
+        print_line "${GREEN}  ✓ AGENTS.md${NC}"
+    else
+        print_line "${YELLOW}  未找到仓库根 AGENTS.md，跳过 AGENTS 同步${NC}"
+    fi
+
+    print_line "${GREEN}  ✓ instructions: ${COPILOT_INSTRUCTIONS_SYNCED} 个，同步到 ~/.github/instructions/${NC}"
+    return 0
+}
+
+sync_cursor() {
+    if [[ ! -d "${SCRIPT_DIR}/.cursor" ]]; then
+        print_line "${YELLOW}[Cursor] 源目录不存在，跳过${NC}"
+        return 0
+    fi
+
+    print_line "${GREEN}[Cursor] 开始同步${NC}"
+
+    mkdir -p ~/.cursor/rules ~/.cursor/skills ~/.cursor/templates
+
+    CURSOR_RULES_SRC="${SCRIPT_DIR}/.cursor/rules"
+    CURSOR_SKILLS_SRC="${SCRIPT_DIR}/.cursor/skills"
+    CURSOR_COMMANDS_SRC="${SCRIPT_DIR}/.cursor/commands"
+    CURSOR_TEMPLATES_SRC="${SCRIPT_DIR}/.cursor/templates"
+    CURSOR_RULES_MANIFEST="${HOME}/.cursor/rules/.swarm-dev-kit-managed"
+    CURSOR_SKILLS_MANIFEST="${HOME}/.cursor/skills/.swarm-dev-kit-managed"
+
+    CURSOR_RULES_SYNCED=0
+    CURSOR_SKILLS_SYNCED=0
+    CURSOR_COMMANDS_SYNCED=0
+
+    # rules → ~/.cursor/rules/（兼容性同步；项目内 .cursor/rules 仍是主路径）
+    if [[ -d "$CURSOR_RULES_SRC" ]]; then
+        new_manifest="$(mktemp)"
+        rule_list="$(mktemp)"
+
+        find "$CURSOR_RULES_SRC" -maxdepth 1 -type f \( -name '*.mdc' -o -name '*.md' \) | LC_ALL=C sort > "$rule_list"
+
+        while IFS= read -r rule_file; do
+            [[ -n "$rule_file" ]] || continue
+            rule_name="$(basename "$rule_file")"
+            printf '%s\n' "$rule_name" >> "$new_manifest"
+            cp "$rule_file" "${HOME}/.cursor/rules/$rule_name"
+            CURSOR_RULES_SYNCED=$((CURSOR_RULES_SYNCED + 1))
+        done < "$rule_list"
+
+        rm -f "$rule_list"
+
+        if [[ -f "$CURSOR_RULES_MANIFEST" ]]; then
+            while IFS= read -r rule_name; do
+                [[ -n "$rule_name" ]] || continue
+                if ! grep -Fxq "$rule_name" "$new_manifest"; then
+                    rm -f "${HOME}/.cursor/rules/$rule_name"
+                fi
+            done < "$CURSOR_RULES_MANIFEST"
+        fi
+
+        mv "$new_manifest" "$CURSOR_RULES_MANIFEST"
+    fi
+
+    # skills（目录） → ~/.cursor/skills/
+    new_manifest="$(mktemp)"
+
+    if [[ -d "$CURSOR_SKILLS_SRC" ]]; then
+        skill_list="$(mktemp)"
+        find "$CURSOR_SKILLS_SRC" -mindepth 1 -maxdepth 1 -type d | LC_ALL=C sort > "$skill_list"
+
+        while IFS= read -r skill_dir; do
+            [[ -n "$skill_dir" ]] || continue
+            skill_name="$(basename "$skill_dir")"
+            printf '%s\n' "$skill_name" >> "$new_manifest"
+            rm -rf "${HOME}/.cursor/skills/$skill_name"
+            cp -R "$skill_dir" "${HOME}/.cursor/skills/$skill_name"
+            CURSOR_SKILLS_SYNCED=$((CURSOR_SKILLS_SYNCED + 1))
+        done < "$skill_list"
+
+        rm -f "$skill_list"
+    fi
+
+    # commands（.md 文件） → ~/.cursor/skills/{name}/SKILL.md
+    if [[ -d "$CURSOR_COMMANDS_SRC" ]]; then
+        cmd_list="$(mktemp)"
+        find "$CURSOR_COMMANDS_SRC" -maxdepth 1 -type f -name '*.md' | LC_ALL=C sort > "$cmd_list"
+
+        while IFS= read -r cmd_file; do
+            [[ -n "$cmd_file" ]] || continue
+            cmd_name="$(basename "$cmd_file" .md)"
+            printf '%s\n' "$cmd_name" >> "$new_manifest"
+            mkdir -p "${HOME}/.cursor/skills/$cmd_name"
+            cp "$cmd_file" "${HOME}/.cursor/skills/$cmd_name/SKILL.md"
+            CURSOR_COMMANDS_SYNCED=$((CURSOR_COMMANDS_SYNCED + 1))
+        done < "$cmd_list"
+
+        rm -f "$cmd_list"
+    fi
+
+    if [[ -f "$CURSOR_SKILLS_MANIFEST" ]]; then
+        while IFS= read -r item_name; do
+            [[ -n "$item_name" ]] || continue
+            if ! grep -Fxq "$item_name" "$new_manifest"; then
+                rm -rf "${HOME}/.cursor/skills/$item_name"
+            fi
+        done < "$CURSOR_SKILLS_MANIFEST"
+    fi
+
+    mv "$new_manifest" "$CURSOR_SKILLS_MANIFEST"
+
+    # templates → ~/.cursor/templates/
+    if [[ -d "$CURSOR_TEMPLATES_SRC" ]]; then
+        find "$CURSOR_TEMPLATES_SRC" -mindepth 1 -maxdepth 1 -type d | LC_ALL=C sort | while IFS= read -r tpl_dir; do
+            [[ -n "$tpl_dir" ]] || continue
+            tpl_name="$(basename "$tpl_dir")"
+            mkdir -p "${HOME}/.cursor/templates/$tpl_name"
+            cp -R "$tpl_dir"/* "${HOME}/.cursor/templates/$tpl_name/" 2>/dev/null || true
+        done
+    fi
+
+    print_line "${GREEN}  ✓ rules: ${CURSOR_RULES_SYNCED} 个，同步到 ~/.cursor/rules/（兼容性补充）${NC}"
+    print_line "${GREEN}  ✓ skills: ${CURSOR_SKILLS_SYNCED} 个，同步到 ~/.cursor/skills/${NC}"
+    print_line "${GREEN}  ✓ commands: ${CURSOR_COMMANDS_SYNCED} 个，同步到 ~/.cursor/skills/（命令式技能兼容层）${NC}"
+    # hooks → ~/.cursor/hooks/ + 無損合併 ~/.cursor/hooks.json
+    if [[ -d "${SCRIPT_DIR}/.cursor/hooks" ]]; then
+        mkdir -p "${HOME}/.cursor/hooks"
+        cp -R "${SCRIPT_DIR}/.cursor/hooks/"* "${HOME}/.cursor/hooks/" 2>/dev/null || true
+        chmod +x "${HOME}/.cursor/hooks/"*.py 2>/dev/null || true
+        if command -v python3 &>/dev/null; then
+            python3 - "${HOME}/.cursor/hooks.json" "${HOME}/.cursor/hooks/guard-dangerous-ops.py" << "PYEOF"
+import json, sys
+from pathlib import Path
+
+hooks_json = Path(sys.argv[1])
+hook_script = sys.argv[2]
+data = {"version": 1, "hooks": {}}
+if hooks_json.exists():
+    try:
+        data = json.loads(hooks_json.read_text(encoding="utf-8"))
+    except Exception:
+        pass
+
+hooks = data.setdefault("hooks", {})
+bse = hooks.setdefault("beforeShellExecution", [])
+guard_cmd = f"python3 \"{hook_script}\" --cursor"
+
+exists = False
+for item in bse:
+    if "guard-dangerous-ops.py" in str(item.get("command", "")):
+        item["command"] = guard_cmd
+        exists = True
+
+if not exists:
+    bse.insert(0, {"command": guard_cmd})
+
+hooks_json.write_text(json.dumps(data, ensure_ascii=False, indent=2) + chr(10), encoding="utf-8")
+PYEOF
+            print_line "${GREEN}  ✓ hooks: beforeShellExecution 安全攔截已合併至 ~/.cursor/hooks.json${NC}"
+        fi
+    fi
+
+    print_line "${GREEN}  ✓ templates: 同步到 ~/.cursor/templates/${NC}"
+    print_line "${YELLOW}  项目内 .cursor/rules 仍是主路径；已保留 ~/.cursor 运行态文件（settings/extensions/cache）${NC}"
+    return 0
+}
+
+run_selected_sync_section "claude" "Claude Code" sync_claude_code
+printf '\n'
+run_selected_sync_section "antigravity" "Antigravity CLI" sync_antigravity_cli
+printf '\n'
+run_selected_sync_section "gemini" "Gemini CLI" sync_gemini_cli
+printf '\n'
+run_selected_sync_section "codex" "Codex" sync_codex
+printf '\n'
+run_selected_sync_section "copilot" "GitHub Copilot" sync_github_copilot
+printf '\n'
+run_selected_sync_section "cursor" "Cursor" sync_cursor
+printf '\n'
+
+if [[ "$SYNC_FAILURES" -gt 0 ]]; then
+    print_line "${YELLOW}=== 同步完成（含 ${SYNC_FAILURES} 个分段失败）===${NC}"
+    exit 1
+fi
+
+print_line "${GREEN}=== 同步完成 ===${NC}"
+if should_sync_target "gemini"; then
+    print_line "${YELLOW}提示: 若在项目目录运行 gemini 出现 'Skill conflict detected' 警告：${NC}"
+    print_line "  这是由于 Gemini CLI 同时加载了全局 (~/.gemini) 和局部 (.gemini) 配置，属于预期行为。"
+    print_line "  局部配置将自动覆盖全局配置，不影响功能使用。"
+fi

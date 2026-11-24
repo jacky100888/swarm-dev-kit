@@ -1,0 +1,4 @@
+# 日常主力 profile：Codex 核心開發（依據 Claude 規格精準實作與單元測試自癒）
+model = "gpt-6.2-sol"
+review_model = "gpt-6.2-sol"
+model_reasoning_effort = "high"

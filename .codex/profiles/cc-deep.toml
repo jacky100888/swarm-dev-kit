@@ -1,0 +1,4 @@
+# 深度分析與大型重構 profile：複雜架構實作、長鏈路排障使用
+model = "gpt-6.2-sol"
+review_model = "gpt-6.2-astra"
+model_reasoning_effort = "xhigh"

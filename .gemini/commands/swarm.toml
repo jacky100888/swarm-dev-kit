@@ -1,0 +1,13 @@
+description = "啟動 Antigravity Swarm 四階段開發流程（Gemini 指揮 → Claude 規格 → Codex 開發 → Claude+Grok 雙軌驗收）"
+prompt = """
+請遵循 Antigravity Swarm 四階段開發流程處理以下任務：
+任務目標：{{args}}
+
+1. [Stage 1 - Gemini 指揮協調]：盤點既有代碼與受影響模組，確立階段交接計畫。
+2. [Stage 2 - Claude 技術規格]：產出或核對 `docs/specs/<feature>.spec.md`（含 API 契約、DB Schema、檔案行數預算、Acceptance Criteria）。
+3. [Stage 3 - Codex 核心開發]：依據 `.spec.md` 實作完整代碼（禁留 TODO/MVP，遵守單檔行數硬限制），執行編譯與單元測試，輸出 `docs/specs/<feature>.impl.md`。
+4. [Stage 4 - Claude + Grok 雙軌驗收]：
+   - Track A (Claude)：檢查 API 契約一致性、架構防禦規則與行數限制。
+   - Track B (Grok)：紅隊審查極端輸入邊界、Race Condition 併發競爭、N+1/OOM 與交易回滾漏洞。
+   - 產出 `docs/specs/<feature>.verify.md`，雙軌通過後交付。
+"""

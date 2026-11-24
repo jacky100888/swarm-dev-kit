@@ -1,0 +1,5 @@
+interface:
+  display_name: "CC Status"
+  short_description: "显式检查 Codex 配置、同步缺口和项目任务状态。"
+policy:
+  allow_implicit_invocation: false

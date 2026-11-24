@@ -1,0 +1,6 @@
+interface:
+  display_name: "cc-storage-url-safety"
+  short_description: >-
+    当使用 MinIO/OSS/S3 等对象存储、设计文件上传下载功能时触发。提供存储 URL 策略选择规范，防止 URL 过期、访问失败等问题。
+policy:
+  allow_implicit_invocation: true

@@ -1,0 +1,6 @@
+interface:
+  display_name: "project-init"
+  short_description: "显式初始化项目说明与基础脚手架文件。"
+  default_prompt: "使用 $project-init 扫描当前仓库，生成项目级 AGENTS.md，并初始化最小项目级 .codex 骨架（.codex/tasks、.codex/tasks/archived、.codex/templates），不覆盖已有项目文件。如果创建骨架时遇到工作区权限边界，应主动请求平台的批准提示来执行 mkdir，而不是静默跳过。随后只补充当前技术栈真正需要、且经用户确认的初始化文件。默认不生成 README.md；如果用户期望生成或刷新 README.md，说明该工作属于 $project-scan，并建议接着执行 $project-scan。"
+policy:
+  allow_implicit_invocation: false

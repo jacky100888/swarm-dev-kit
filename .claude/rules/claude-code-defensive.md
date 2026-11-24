@@ -1,0 +1,194 @@
+---
+paths: "**/*"
+---
+# Claude Code 防御性规则
+
+> 预防常见 AI 编码陷阱，基于社区最佳实践。
+
+---
+
+## 🤝 AI 协作三原则
+
+> 元规则：规范 AI 如何与用户协作，先于具体禁止/必须项。
+
+### 1. 用户主权（Locus of Control）
+- ❌ 擅自扩需求、主动重构未要求的代码
+- ❌ 跳过用户确认执行不可逆操作
+- ✅ 复杂任务先说计划再实现；危险操作必须确认
+- 落地参考：本文件「复杂任务工作流」、`ops-safety` skill
+
+### 2. 状态显式化（Reduce Memory Load）
+- ❌ 让用户自己记住"刚才说过什么"
+- ❌ 任务中途无任何状态可视化
+- ✅ 多步任务用 TaskCreate；功能开发用 `.claude/tasks/{name}-{date}.md`
+- 落地参考：每完成一步同步更新任务文件
+
+### 3. 输出一致性（Consistency）
+- ❌ 同类操作输出格式各不相同
+- ❌ 同义命令命名混乱（new-feature/new-feat/create-feature）
+- ✅ 规则溯源统一格式；命令命名遵循现有约定
+- 落地参考：本文件末尾「规则溯源」格式
+
+---
+
+## 🚫 严格禁止
+
+### 1. 测试篡改（最严重）
+- ❌ 修改测试断言来适配错误实现
+- ❌ 删除或注释掉失败的测试
+- ✅ 测试失败时，修复实现代码
+
+### 2. 过度工程化
+- 新增功能控制在 3 个文件以内
+- 简单 if/else 优于复杂抽象
+- 不要创建"策略模式"、"工厂模式"等，除非明确需要
+
+### 3. 盲目修改代码
+修改前必须：搜索类似功能 → 检查调用点 → 了解影响范围
+
+### 3.5 重构代码（高风险）
+**重构前必须**：
+- 完整读取原始代码（不凭记忆或推测）
+- 制作对比清单（表格列/数据字段/配置项）
+- 逐项验证一致性（数量/顺序/命名）
+
+**表格重构**：列数、列名、列顺序必须与原始代码完全一致
+**条件分支重构**：所有 if/else/switch 分支都必须处理，不能只处理一个分支就推测其他分支
+**服务拆分重构**：先提取共享工具方法到独立类，再拆分子服务（防止循环依赖）
+
+### 4. 中途放弃任务
+- 创建 TODO 列表后，完成所有项目再停止
+- 遇到困难时请求帮助，不要直接放弃
+
+### 5. 幽灵代码
+- ❌ 用"注释掉旧实现"代替删除
+- ❌ 提交调试残留：`print`/`console.log`/`debugger`
+
+### 6. 主动创建文档
+只在明确要求时创建文档，不要主动生成中间总结、变更说明等
+
+### 7. 自动添加元数据
+- ❌ "Generated with Claude Code" 或类似标记
+- ❌ AI 生成声明、作者署名、自动时间戳
+
+### 8. 用"全局开关"掩盖错误（最隐蔽）
+
+**症状**：报错出现 → 反应是去 `application.properties` / `tsconfig` / `build.gradle`
+开一个全局放行开关让报错消失，而不是修根因。
+
+**典型反模式**：
+
+| 语言/框架 | 错误开关 | 真正应该做的 |
+|----------|---------|------------|
+| Spring Boot | `spring.main.allow-bean-definition-overriding=true` | 找重名 Bean，改 name 或拆 Bean |
+| Spring Boot | `spring.main.allow-circular-references=true` | 找循环依赖根因，拆 Service / `@Lazy` |
+| TypeScript | `skipLibCheck` / `noImplicitAny:false` / `strict:false` | 修类型错误 / 补 `.d.ts` |
+| TypeScript | `// @ts-ignore` / `// @ts-nocheck` 整文件 | 针对单行修正类型 |
+| Maven | `-Dmaven.test.skip` / `-DskipTests` | 修失败的测试 |
+| Gradle | `tasks.withType<Test> { enabled = false }` | 修失败的测试 |
+| Go build | `// +build ignore` 全文件忽略 | 拆出有问题的代码 |
+| Python | `warnings.filterwarnings('ignore')` 全局 | 针对单个 warning 处理 |
+| Webpack/Vite | `transpileOnly: true` / 禁用 fork-ts-checker | 修类型，不要绕过 |
+| ESLint | 文件顶 `/* eslint-disable */` | 针对单条规则 disable |
+| Hibernate | `hbm2ddl.auto=update` 掩盖 schema 漂移 | 用迁移工具（Flyway/Liquibase） |
+
+**判定原则**：
+- 启用任何 `allow-*` / `ignore-*` / `skip-*` / `disable-*` 配置前，必须先输出
+  "**这个开关会掩盖什么类型的错误？**"，得到答案后再决定
+- 临时绕过单行可接受（必须带 TODO 和 issue 链接）；改全局配置直接驳回
+- 每个掩盖式开关都意味着"以后还会有相同根因的 bug"
+
+**典型踩坑案例**：Spring Bean 名称冲突 → AI 反射式开
+`spring.main.allow-bean-definition-overriding=true` → 后续注入类型不匹配
+报"no qualifying bean of type X"，根因被掩盖几小时才找到。
+
+**与第 1 条「测试篡改」的关系**：本条是"配置层"的测试篡改 ——
+不改测试断言，但改运行时让错误不抛出来，本质一样。
+
+### 9. 外部黑盒系统调试（先抓数据，再推理）
+
+**症状**：bug 涉及代码以外的外部系统（浏览器、编辑器、CDN/WAF、IM 平台、操作系统剪贴板、第三方 SaaS），却反应式地凭代码理解反复改代码。
+
+**典型触发**：
+- 粘贴/复制到第三方平台显示异常（CSDN/微信/Notion/钉钉/飞书…）
+- 跨浏览器/跨设备/跨终端表现不一致
+- 第三方 API 返回怪结果（body 空、headers 极简、200 但 error）
+- 本地复现失败但线上有问题
+
+**判定原则**：
+- 第一步是让用户输出真实环境数据（Console `outerHTML` / `curl -v` / DOM 截图 / Network 面板），不是写代码
+- **连续 2 轮"凭代码推理"的修复都 no-op，必须立即停下抓数据**
+- 代码没说谎，黑盒系统的行为不在代码里
+
+**反模式示例**：
+- 后端输出 `<ol start="2">` → 假设浏览器/编辑器会保留 → CSDN HTML→MD 丢 start → 4 个 "1."（必须抓 DOM 才能定位）
+- HTTP body 空 + headers 极简 → 假设业务错误 → 实际 CDN/WAF 拦截（GET 正常 POST 异常）
+
+**与第 3 条「盲目修改代码」的关系**：本条是"凭代码推理修不动代码外的 bug" —— 应主动跳出代码、抓真实环境数据。
+
+详细方法论、数据采集模板、案例库见 `skills/external-system-debugging/`。
+
+---
+
+## ✅ 必须遵循
+
+### 1. Type-First（类型先行）
+编写业务逻辑前，先定义数据结构（Go: struct/interface, TS: interface/type, Java: DTO/VO）
+
+### 2. 复杂任务工作流
+**复杂任务**：超过 3 个步骤或涉及多个文件
+
+```
+步骤1: 说明计划 → 等待确认 ⏸️
+步骤2: 逐步实现 → 验证功能
+步骤3: 完成验证 → 所有测试通过
+```
+
+### 3. 检查清单
+**修改前**：搜索类似功能 / 了解现有模式 / 确认不破坏现有功能
+
+**提交前**：测试通过 / 无调试残留 / TODO 全部完成
+
+### 4. LSP 使用原则
+**优先用 LSP**：查找定义、查找引用、大型项目导航
+
+**不用 LSP（直接 Grep/Read）**：全文搜索、搜索注释/字符串、理解整体架构、查看文件结构
+
+**调用声明**：`> 🔍 LSP: gopls - Find References`
+
+### 5. 上下文管理
+- 大文件用 Grep 定位 + Read 局部读取，避免整文件加载
+- 长任务中旁路问题建议用户使用 `/btw`，不污染主对话历史
+- 感知到上下文较满时，提醒用户可 `/compact` 压缩或开新会话
+
+---
+
+## 📂 大文件处理
+
+| 目的 | 方法 |
+|------|------|
+| 找特定内容 | `Grep: pattern="functionName"` |
+| 读特定区域 | `Read: offset=150, limit=50` |
+| 修改某处 | Grep 定位 → Read 上下文 → Edit |
+
+---
+
+## 🎯 决策原则
+
+```
+简单方案 > 复杂方案
+复用现有 > 创建新的
+直接实现 > 抽象封装
+```
+
+**问题排查**：复现 → 假设 → 验证（一次改一个变量） → 最小修复
+
+**外部黑盒系统调试**：bug 涉及浏览器/编辑器/CDN/WAF/IM 平台/第三方 SaaS 等代码以外的环境时，第一步必须是抓真实数据（详见严格禁止 #9 + `skills/external-system-debugging/`）。
+
+---
+
+## 规则溯源
+
+```
+> 📋 本回复遵循：`claude-code-defensive.md` - [章节]
+```

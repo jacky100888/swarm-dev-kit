@@ -1,0 +1,35 @@
+# 僅自動放行 Git 唯讀檢視指令；破壞性寫入交由 dangerous-ops.toml 攔截或人工確認
+
+[[rule]]
+toolName = "run_shell_command"
+commandPrefix = "git diff"
+decision = "allow"
+priority = 200
+description = "允許唯讀指令 git diff"
+
+[[rule]]
+toolName = "run_shell_command"
+commandPrefix = "git status"
+decision = "allow"
+priority = 200
+description = "允許唯讀指令 git status"
+
+[[rule]]
+toolName = "run_shell_command"
+commandPrefix = "git log"
+decision = "allow"
+priority = 200
+description = "允許唯讀指令 git log"
+
+[[rule]]
+toolName = "run_shell_command"
+commandPrefix = "git branch"
+decision = "allow"
+priority = 200
+description = "允許檢視分支 git branch（git branch -D 由高優先級 deny 攔截）"
+
+[[rule]]
+toolName = "commit_msg"
+decision = "allow"
+priority = 210
+description = "允許 commit_msg 生成工具"

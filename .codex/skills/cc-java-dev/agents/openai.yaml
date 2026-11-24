@@ -1,0 +1,5 @@
+interface:
+  display_name: "cc-java-dev"
+  short_description: "Java 与 Spring Boot 开发规范、DTO 更新、分页和测试约束。"
+policy:
+  allow_implicit_invocation: true

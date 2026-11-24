@@ -1,0 +1,6 @@
+interface:
+  display_name: "cc-project-init"
+  short_description: "project-init 的兼容别名。"
+  default_prompt: "$cc-project-init 是 $project-init 的别名。遵循标准 project-init 流程：扫描当前仓库，生成或更新项目级 AGENTS.md，初始化最小项目级 .codex 骨架（.codex/tasks、.codex/tasks/archived、.codex/templates），不覆盖已有项目文件，仅在用户明确确认后再补充额外初始化文件。如果用户期望生成 README.md，说明 README 刷新属于 $project-scan，并建议接着执行 $project-scan。"
+policy:
+  allow_implicit_invocation: false

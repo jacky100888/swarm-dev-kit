@@ -1,0 +1,5 @@
+# 自定義說明 profile：為 model_instructions_file 預留專案級掛載點
+model = "gpt-6.2-sol"
+review_model = "gpt-6.2-sol"
+model_reasoning_effort = "high"
+model_instructions_file = "./instructions/custom.md"

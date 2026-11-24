@@ -1,0 +1,22 @@
+{
+  "name": "swarm-dev-kit",
+  "description": "多模型 Swarm 協作與防禦性 AI 編碼配置體系 | Multi-Model Swarm Workflow & Defensive AI Coding Config Kit (Gemini → Claude → Codex → Claude+Grok)",
+  "version": "1.1.0",
+  "author": {
+    "name": "Jacky Lee"
+  },
+  "homepage": "https://github.com/jacky100888/swarm-dev-kit",
+  "repository": "https://github.com/jacky100888/swarm-dev-kit",
+  "license": "MIT",
+  "keywords": [
+    "swarm-workflow",
+    "antigravity",
+    "claude-code",
+    "codex",
+    "gemini-cli",
+    "cursor",
+    "grok",
+    "ai-coding"
+  ],
+  "category": "productivity"
+}

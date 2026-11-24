@@ -1,0 +1,6 @@
+interface:
+  display_name: "cc-multi-tenant-safety"
+  short_description: >-
+    当代码涉及多租户隔离（TenantContext、tenantId、租户拦截器/过滤器、X-Tenant-Code）时触发。防止租户越权访问、数据串租户等安全问题。
+policy:
+  allow_implicit_invocation: true

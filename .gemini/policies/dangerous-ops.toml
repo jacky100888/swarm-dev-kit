@@ -1,0 +1,99 @@
+# swarm-dev-kit 高優先級安全拒絕策略（防止 AI 誤刪檔案或破壞 Git 歷史）
+
+[[rule]]
+toolName = "run_shell_command"
+commandPrefix = "rm "
+decision = "deny"
+priority = 900
+description = "硬攔截 rm 刪除指令，避免誤刪專案或系統檔案"
+
+[[rule]]
+toolName = "run_shell_command"
+commandPrefix = "sudo rm"
+decision = "deny"
+priority = 950
+description = "硬攔截特權刪除指令 sudo rm"
+
+[[rule]]
+toolName = "run_shell_command"
+commandPrefix = "git reset --hard"
+decision = "deny"
+priority = 900
+description = "硬攔截 git reset --hard，防止未提交變更遺失"
+
+[[rule]]
+toolName = "run_shell_command"
+commandPrefix = "git clean"
+decision = "deny"
+priority = 900
+description = "硬攔截 git clean，防止未追蹤檔案被強制清除"
+
+[[rule]]
+toolName = "run_shell_command"
+commandPrefix = "git push --force"
+decision = "deny"
+priority = 900
+description = "硬攔截 git push --force，防止覆寫遠端歷史"
+
+[[rule]]
+toolName = "run_shell_command"
+commandPrefix = "git push -f"
+decision = "deny"
+priority = 900
+description = "硬攔截 git push -f，防止覆寫遠端歷史"
+
+[[rule]]
+toolName = "run_shell_command"
+commandPrefix = "git checkout -- ."
+decision = "deny"
+priority = 900
+description = "硬攔截 git checkout -- .，防止丟棄整個工作區變更"
+
+[[rule]]
+toolName = "run_shell_command"
+commandPrefix = "git restore ."
+decision = "deny"
+priority = 900
+description = "硬攔截 git restore .，防止丟棄整個工作區變更"
+
+[[rule]]
+toolName = "run_shell_command"
+commandPrefix = "git branch -D"
+decision = "deny"
+priority = 900
+description = "硬攔截強制刪除分支 git branch -D"
+
+[[rule]]
+toolName = "run_shell_command"
+commandPrefix = "chmod -R 777"
+decision = "deny"
+priority = 950
+description = "硬攔截 chmod -R 777 過度放權"
+
+[[rule]]
+toolName = "run_shell_command"
+commandPrefix = "mkfs"
+decision = "deny"
+priority = 950
+description = "硬攔截磁碟格式化指令 mkfs"
+
+[[rule]]
+toolName = "run_shell_command"
+commandPrefix = "dd "
+decision = "deny"
+priority = 950
+description = "硬攔截低階磁碟寫入指令 dd"
+
+[[rule]]
+toolName = "run_shell_command"
+commandPrefix = "shutdown"
+decision = "deny"
+priority = 950
+description = "硬攔截系統關機指令"
+
+[[rule]]
+toolName = "run_shell_command"
+commandPrefix = "reboot"
+decision = "deny"
+priority = 950
+description = "硬攔截系統重開機指令"

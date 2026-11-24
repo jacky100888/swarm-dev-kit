@@ -1,0 +1,5 @@
+interface:
+  display_name: "cc-frontend-dev"
+  short_description: "前端开发规范：Vue、React、TypeScript、组件库与常见状态陷阱。"
+policy:
+  allow_implicit_invocation: true
