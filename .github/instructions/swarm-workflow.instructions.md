@@ -16,7 +16,7 @@ applyTo: "**"
 
 | 階段 | 角色 | 推薦模型 | 核心輸入 | 強制交接產物 (Artifact) |
 |------|------|----------|----------|------------------------|
-| **Stage 1** | **指揮協調者 (Coordinator)** | Google Gemini (`gemini-4-neon` / `gemini-3.8-flash`) | 使用者原始需求 | 任務拆解清單、看板派工指令 |
+| **Stage 1** | **指揮協調者 (Coordinator)** | Google Gemini (`gemini-4-neon` / `gemini-4-hydrogen`) | 使用者原始需求 | 任務拆解清單、看板派工指令 |
 | **Stage 2** | **技術文檔與規格 (Architect)** | Claude (`claude-opus-5-5[1m]` / `claude-sonnet-5-5`) | 階段 1 派工 + 既有代碼庫 | `docs/specs/<feature>.spec.md` |
 | **Stage 3** | **核心代碼開發 (Coder)** | Codex (`gpt-6.2-sol` / `gpt-6.2-astra`) | `docs/specs/<feature>.spec.md` | 代碼變更 + 單元測試 + `docs/specs/<feature>.impl.md` |
 | **Stage 4A** | **架構與契約驗收 (Claude QA)** | Claude (`claude-opus-5-5`) | `.spec.md` + `.impl.md` + `git diff` | 架構契約審查結論（寫入 `docs/specs/<feature>.verify.md`） |

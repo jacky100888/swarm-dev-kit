@@ -9,7 +9,7 @@ argument-hint: "功能需求或任務描述"
 
 請嚴格按照 `swarm-workflow` 技能定義的四階段流水線推進（若在 OpenMausBot 中由 Gemini 指揮官執行，請透過 `coordinate_bots` 依序調度 `Claude-Spec`、`Codex-Dev`、`Grok-QA`）：
 
-1. **Stage 1 — Gemini 指揮拆解 (`gemini-4-neon` / `gemini-3.8-flash`)**
+1. **Stage 1 — Gemini 指揮拆解 (`gemini-4-neon` / `gemini-4-hydrogen`)**
    - 盤點受影響模組與現有程式碼結構，建立任務看板與交接計畫。
 2. **Stage 2 — Claude 技術規格文檔 (`Claude-Spec` / `claude-opus-5-5[1m]`)**
    - 產出 `docs/specs/<feature>.spec.md`（鎖定範圍、DB Schema、API 契約、檔案行數拆分預算、Acceptance Criteria）。

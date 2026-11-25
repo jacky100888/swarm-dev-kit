@@ -28,7 +28,7 @@
 使用者需求 (User Request)
    │
    ▼
-[Stage 1] 指揮協調者 (Coordinator) ── Google Gemini (gemini-4-neon / gemini-3.8-flash)
+[Stage 1] 指揮協調者 (Coordinator) ── Google Gemini (gemini-4-neon / gemini-4-hydrogen)
    │  拆解任務、建立看板交接與進度追蹤
    ▼
 [Stage 2] 技術文檔與規格 (Architect) ── Claude (claude-opus-5-5[1m] / claude-sonnet-5-5)
@@ -132,7 +132,7 @@ Instead of relying on a single model from planning to QA, `swarm-dev-kit` separa
 
 | Stage | Role | Recommended Model | Responsibility & Artifact |
 | :--- | :--- | :--- | :--- |
-| **Stage 1** | **Coordinator** | **Google Gemini (Antigravity)**<br>`gemini-4-neon` / `gemini-3.8-flash` | Task decomposition, board tracking, stage handoffs, final synthesis |
+| **Stage 1** | **Coordinator** | **Google Gemini (Antigravity)**<br>`gemini-4-neon` / `gemini-4-hydrogen` | Task decomposition, board tracking, stage handoffs, final synthesis |
 | **Stage 2** | **Spec & Architect** | **Claude**<br>`claude-opus-5-5[1m]` / `claude-sonnet-5-5` | Read existing codebase, produce `docs/specs/<feature>.spec.md` (DB schema, API contract, file-size budget, acceptance criteria) |
 | **Stage 3** | **Core Developer** | **Codex**<br>`gpt-6.2-sol` / `gpt-6.2-astra` | Implement strictly per `.spec.md`, run build/tests until green, output `docs/specs/<feature>.impl.md` with real test evidence |
 | **Stage 4** | **Dual-Track QA** | **Claude** (`claude-opus-5-5`) +<br>**Grok** (`grok-4.7`) | **Track A (Claude)**: architecture, API contract & security review.<br>**Track B (Grok)**: adversarial edge cases, race conditions, N+1/OOM & rollback audits.<br>Outputs `docs/specs/<feature>.verify.md`. Both must pass to ship. |
@@ -142,7 +142,7 @@ Instead of relying on a single model from planning to QA, `swarm-dev-kit` separa
 - **Antigravity CLI** (`.antigravity/`): `AGENTS.md`, frontmatter-scoped rules, 24 synced skills
 - **Claude Code** (`.claude/` & `.claude-plugin/`): `CLAUDE.md`, rules, skills, commands, project templates, Marketplace plugin support
 - **Codex** (`.codex/`): `AGENTS.md` managed block, `gpt-6.2-sol` / `gpt-6.2-astra` / `gpt-6-luna` profiles, dangerous command guards, 39 `cc-*` skills
-- **Gemini CLI** (`.gemini/`): `GEMINI.md`, `gemini-4-neon` / `gemini-3.8-flash` aliases, TOML commands, skill namespace isolation
+- **Gemini CLI** (`.gemini/`): `GEMINI.md`, `gemini-4-neon` / `gemini-4-hydrogen` aliases, TOML commands, skill namespace isolation
 - **Cursor** (`.cursor/`): `.mdc` rules, skills, commands, templates
 - **GitHub Copilot** (`.github/`): `copilot-instructions.md` and path-scoped `.instructions.md`
 

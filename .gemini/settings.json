@@ -6,7 +6,7 @@
   "timeout": 120000,
   "model_aliases": {
     "pro": "gemini-4-neon",
-    "flash": "gemini-3.8-flash"
+    "flash": "gemini-4-hydrogen"
   },
   "experimental": {},
   "core": {

@@ -22,7 +22,7 @@
 
 ## Antigravity Swarm 四階段多模型協作工作流 (Coordinator Role)
 
-在多模型協作環境中，**Google Gemini (Antigravity，推薦 `gemini-4-neon` 或 `gemini-3.8-flash`)** 擔任 **指揮協調者 (Coordinator)**，管理看板（Board）、成員狀態（Members）與階段交接證據（Overview）：
+在多模型協作環境中，**Google Gemini (Antigravity，推薦 `gemini-4-neon` 或 `gemini-4-hydrogen`)** 擔任 **指揮協調者 (Coordinator)**，管理看板（Board）、成員狀態（Members）與階段交接證據（Overview）：
 
 1. **Stage 1：指揮拆解 (Gemini Coordinator)**
    - 釐清使用者需求、盤點受影響模組，將任務拆解並派發給專責成員。
