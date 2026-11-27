@@ -1,9 +1,9 @@
 ---
-description: 核心代碼開發（Swarm Stage 3 - Codex 工程師：依據 Claude 技術規格實作功能、跑測試並輸出交接證據）
+description: 功能開發（Swarm Stage 3 - 開發者：依據 Claude 技術規格實作功能、跑測試並輸出交接證據）
 argument-hint: "[功能描述 或 docs/specs/<feature>.spec.md 路徑]"
 ---
 
-> **Swarm Stage 3（Codex 核心代碼開發）**：本命令由 Codex 工程師（推薦 `gpt-6.2-sol` / `gpt-6.2-astra`）執行。
+> **Swarm Stage 3（開發）**：由 Claude（主力，`claude-opus-5-5`）與 Gemini（協同，`gemini-4-neon`）執行，只改分配給自己的檔案。
 
 功能需求或規格路徑：「$ARGUMENTS」
 
@@ -22,10 +22,10 @@ argument-hint: "[功能描述 或 docs/specs/<feature>.spec.md 路徑]"
 - **禁止掩蓋錯誤**：嚴禁修改既有測試來適配錯誤代碼；嚴禁開啟全域放行開關（如 `skipLibCheck`、`-DskipTests`、`@ts-nocheck`）。
 - **作者署名**：新增檔案頭註解統一使用 `Jacky`（如 `@author Jacky`）；git commit 嚴禁添加 `Co-Authored-By` 或 AI 署名。
 
-### 第 3 步：自癒驗證與交接證據輸出（供 Stage 4 Claude + Grok 雙軌驗收）
+### 第 3 步：自癒驗證與交接證據輸出（供 Stage 4 驗收）
 1. 在終端機實際執行編譯、Linter 與單元測試（如 `go test ./...`、`mvn test`、`npm run build`），若失敗則自癒修復至綠燈。
 2. 輸出（或寫入 `docs/specs/<feature>.impl.md`）以下結構化交接清單：
    - **【變更檔案與行數檢查表】**
    - **【Acceptance Criteria 逐項完成對照】**
    - **【測試執行指令與真實終端機輸出證據】**
-   - **【請 Claude (架構契約) 與 Grok (紅隊邊界) 重點審查區塊】**
+   - **【請驗收者重點審查區塊與高風險 diff 範圍】**

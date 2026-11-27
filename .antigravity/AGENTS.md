@@ -5,11 +5,11 @@
 @./rules/doc-sync.md
 @./rules/chinese-language.md
 
-# AGENTS.md - Antigravity Swarm 指揮協調與智能工作規則
+# AGENTS.md - Antigravity Swarm 協同開發與智能工作規則
 
 版本：v2.0
 作者：Jacky
-更新：2026-11-25
+更新：2026-11-26
 
 ---
 
@@ -20,23 +20,14 @@
 
 ---
 
-## Antigravity Swarm 四階段多模型協作工作流 (Coordinator Role)
+## Antigravity Swarm 四階段多模型協作工作流 (Co-Developer Role)
 
-在多模型協作環境中，**Google Gemini (Antigravity，推薦 `gemini-4-neon` 或 `gemini-4-hydrogen`)** 擔任 **指揮協調者 (Coordinator)**，管理看板（Board）、成員狀態（Members）與階段交接證據（Overview）：
+在 Swarm 任務中，**Gemini（`gemini-4-neon` high）** 擔任 **協同開發者**（指揮由 Grok、規格與開發主力由 Claude、驗收由 Codex）：
 
-1. **Stage 1：指揮拆解 (Gemini Coordinator)**
-   - 釐清使用者需求、盤點受影響模組，將任務拆解並派發給專責成員。
-   - 簡單單點修改可直接完成；涉及 3+ 檔案、架構變更或新功能時，啟動 Swarm 四階段交接。
-2. **Stage 2：技術文檔與契約設計 (Claude Architect — `claude-opus-5-5[1m]`)**
-   - 交由 Claude 撰寫技術規格書 `docs/specs/<feature>.spec.md`（或執行 `/design doc`、`/swarm-spec`）。
-   - 必須鎖定：資料庫變更、API 請求/回應契約、錯誤處理、檔案行數拆分計畫與 Acceptance Criteria。
-3. **Stage 3：核心代碼開發 (Codex Engineer — `gpt-6.2-sol`)**
-   - 交由 Codex 依據 `.spec.md` 實作代碼與單元測試（或執行 `/new-feature`、`/swarm-impl`）。
-   - 強制要求回報交接證據：變更檔案清單、編譯與測試真實輸出、風險說明（寫入 `docs/specs/<feature>.impl.md`）。
-4. **Stage 4：雙軌交叉驗收 (Claude + Grok Dual-Track QA)**
-   - **Claude 軌 (`claude-opus-5-5`)**：對照 `.spec.md` 審查架構一致性、API 契約、防禦規範與安全性。
-   - **Grok 軌 (`grok-4.7`)**：紅隊挑錯，專攻極端輸入邊界、Null/空集合、Race Condition 併發競爭、效能瓶頸與異常回滾漏洞。
-   - 雙軌皆給出 `APPROVED` 後，由 Gemini 指揮官彙整結果交付使用者；任一軌 `REJECTED` 則附帶具體行號與重工指令退回 Codex。
+- **負責範圍**：frontend、契約清楚的低風險後端（CRUD、查詢 API、報表匯出、獨立背景工作）及其測試與文件。
+- **不做**：權限、金流、併發、DB schema／migration；共用型別、schema、路由、設定、套件清單歸 Claude。
+- **交接**：只改分配給自己的檔案，依 `docs/specs/<feature>.spec.md` 實作，回報變更檔案與真實測試輸出（寫入 `docs/specs/<feature>.impl.md`）；契約有問題時回報指揮。
+- 單獨使用（非 Swarm 任務）時，照一般工作規則進行。完整流程見 `swarm-workflow` 技能。
 
 ---
 

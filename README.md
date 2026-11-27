@@ -28,19 +28,19 @@
 使用者需求 (User Request)
    │
    ▼
-[Stage 1] 指揮協調者 (Coordinator) ── Google Gemini (gemini-4-neon / gemini-4-hydrogen)
-   │  拆解任務、建立看板交接與進度追蹤
+[Stage 1] 指揮協調者 (Coordinator) ── Grok (grok-4.7)
+   │  拆解任務、判斷風險等級、檔案分工
    ▼
-[Stage 2] 技術文檔與規格 (Architect) ── Claude (claude-opus-5-5[1m] / claude-sonnet-5-5)
-   │  產出 docs/specs/<feature>.spec.md（DB Schema、API 契約、檔案行數預算、Acceptance Criteria）
+[Stage 2] 技術文檔與規格 (Architect) ── Claude (claude-opus-5-5[1m]；大型新系統用 claude-fable-5-2)
+   │  產出 docs/specs/<feature>.spec.md（DB Schema、API 契約、檔案分工與行數預算、Acceptance Criteria）
    ▼
-[Stage 3] 核心代碼開發 (Coder) ─────── Codex (gpt-6.2-sol / gpt-6.2-astra)
-   │  依規格實作完整代碼與單元測試，產出 docs/specs/<feature>.impl.md（變更清單與真實測試輸出）
+[Stage 3] 開發 (Developers)
+   ├── 主力：Claude (claude-opus-5-5) ── 核心邏輯、整合、DB/migration、權限/金流/併發
+   └── 協同：Gemini (gemini-4-neon) ──── frontend、低風險後端、測試、文件
+   │  不改同一檔案；合併後測試，產出 docs/specs/<feature>.impl.md
    ▼
-[Stage 4] 雙軌交叉驗收 (Dual-Track QA)
-   ├── Track A (架構與契約軌)：Claude (claude-opus-5-5) ── 核對 API 契約、防禦規範、權限與行數上限
-   └── Track B (紅隊邊界軌)：Grok (grok-4.7) ──────────── 專攻極端輸入、Race Condition、N+1/OOM 與回滾漏洞
-   │  產出 docs/specs/<feature>.verify.md（雙軌皆 PASS 交付；任一 FAIL 附帶行號退回 Codex 重工）
+[Stage 4] 單一關驗收 (Single-Gate QA) ── Codex (gpt-6.2-sol)；高風險加紅隊 (gpt-daybreak-blue-latest)
+   │  產出 docs/specs/<feature>.verify.md（FAIL 退回原開發者，只複驗未通過項目）
    ▼
 最終交付 (Verified Delivery)
 ```
@@ -108,10 +108,10 @@ cd swarm-dev-kit
 
 | 指令 | 對應階段 | 用途說明 |
 | :--- | :--- | :--- |
-| `/swarm` | 全流程 | 啟動 Gemini → Claude → Codex → Claude+Grok 四階段完整調度 |
+| `/swarm` | 全流程 | 啟動 Grok → Claude → Claude+Gemini → Codex 四階段完整調度 |
 | `/design doc` | Stage 2 (Claude) | 產出 `docs/specs/<feature>.spec.md` 技術規格書與 API 契約 |
-| `/new-feature` | Stage 3 (Codex) | 依 `.spec.md` 實作功能、跑測試並產出 `docs/specs/<feature>.impl.md` |
-| `/review [full\|quick\|security\|grok]` | Stage 4 (Claude+Grok) | 執行白盒契約審查 + Grok 紅隊邊界壓力測試，產出 `.verify.md` |
+| `/new-feature` | Stage 3 (Claude+Gemini) | 依 `.spec.md` 實作功能、跑測試並產出 `docs/specs/<feature>.impl.md` |
+| `/review [full\|quick\|security\|grok]` | Stage 4 (Codex) | 單一關審查契約與邊界反例（高風險加紅隊），產出 `.verify.md` |
 | `/requirement` / `/fix` / `/optimize` / `/commit-msg` / `/project-init` / `/project-scan` | 通用工程 | 需求澄清、最小修復、效能重構、規範提交訊息、專案初始化與架構掃描 |
 
 **內建 24 個跨平台 Skills**：
@@ -132,10 +132,10 @@ Instead of relying on a single model from planning to QA, `swarm-dev-kit` separa
 
 | Stage | Role | Recommended Model | Responsibility & Artifact |
 | :--- | :--- | :--- | :--- |
-| **Stage 1** | **Coordinator** | **Google Gemini (Antigravity)**<br>`gemini-4-neon` / `gemini-4-hydrogen` | Task decomposition, board tracking, stage handoffs, final synthesis |
-| **Stage 2** | **Spec & Architect** | **Claude**<br>`claude-opus-5-5[1m]` / `claude-sonnet-5-5` | Read existing codebase, produce `docs/specs/<feature>.spec.md` (DB schema, API contract, file-size budget, acceptance criteria) |
-| **Stage 3** | **Core Developer** | **Codex**<br>`gpt-6.2-sol` / `gpt-6.2-astra` | Implement strictly per `.spec.md`, run build/tests until green, output `docs/specs/<feature>.impl.md` with real test evidence |
-| **Stage 4** | **Dual-Track QA** | **Claude** (`claude-opus-5-5`) +<br>**Grok** (`grok-4.7`) | **Track A (Claude)**: architecture, API contract & security review.<br>**Track B (Grok)**: adversarial edge cases, race conditions, N+1/OOM & rollback audits.<br>Outputs `docs/specs/<feature>.verify.md`. Both must pass to ship. |
+| **Stage 1** | **Coordinator** | **Grok**<br>`grok-4.7` | Task decomposition, risk rating, file ownership, final synthesis |
+| **Stage 2** | **Spec & Architect** | **Claude**<br>`claude-opus-5-5[1m]` (`claude-fable-5-2` for new systems) | Read existing codebase, produce `docs/specs/<feature>.spec.md` (DB schema, API contract, file ownership, acceptance criteria) |
+| **Stage 3** | **Developers** | **Claude** (`claude-opus-5-5`, lead) +<br>**Gemini** (`gemini-4-neon`) | Lead: core logic, integration, DB/migrations, auth/payments/concurrency. Co-dev: frontend, low-risk backend, tests, docs. No shared files; output `docs/specs/<feature>.impl.md` |
+| **Stage 4** | **Single-Gate QA** | **Codex** (`gpt-6.2-sol`)<br>High risk: `gpt-daybreak-blue-latest` | Contract, defensive rules and edge cases; outputs `docs/specs/<feature>.verify.md`. Grok is the fallback reviewer. Only failed items are re-verified. |
 
 ### 2. Supported Platforms & Models
 

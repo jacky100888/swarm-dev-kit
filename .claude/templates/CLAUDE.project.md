@@ -177,10 +177,10 @@ mysql -u root -p [数据库名]
 
 ---
 
-## 多模型 Swarm 協作約定 (Gemini → Claude → Codex → Claude+Grok)
+## 多模型 Swarm 協作約定 (Grok → Claude → Claude+Gemini → Codex)
 
 本專案採用 Antigravity Swarm 四階段開發工作流：
-1. **Stage 1（Gemini 指揮協調）**：拆解任務、派工與追蹤看板狀態。
-2. **Stage 2（Claude 技術文檔）**：複雜功能或架構變更先產出 `docs/specs/<feature>.spec.md`（鎖定 DB Schema、API 契約、檔案行數預算與驗收標準）。
-3. **Stage 3（Codex 核心開發）**：依據 `.spec.md` 實作代碼與單元測試，執行測試並輸出交接證據 `docs/specs/<feature>.impl.md`。
-4. **Stage 4（Claude + Grok 雙軌驗收）**：Claude 審查架構與 API 契約一致性，Grok 審查極端邊界、Race Condition 併發與漏洞，輸出 `docs/specs/<feature>.verify.md`，雙軌通過後交付。
+1. **Stage 1（Grok 指揮）**：拆解任務、判斷風險等級、列出檔案分工。
+2. **Stage 2（Claude 技術文檔）**：複雜功能或架構變更先產出 `docs/specs/<feature>.spec.md`（DB Schema、API 契約、檔案分工與行數預算、驗收標準）。
+3. **Stage 3（開發）**：Claude 做核心與高風險部分，Gemini 做 frontend、低風險後端、測試與文件；不改同一檔案，合併後測試並輸出 `docs/specs/<feature>.impl.md`。
+4. **Stage 4（Codex 驗收）**：單一關審查契約與邊界反例，僅權限、金流、migration、併發加紅隊；輸出 `docs/specs/<feature>.verify.md`，退件只複驗未通過項目。

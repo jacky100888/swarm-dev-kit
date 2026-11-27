@@ -2,4 +2,4 @@ swarm-dev-kit
 Copyright (c) 2026 Jacky Lee
 
 Open-source under the MIT License.
-Multi-model Antigravity Swarm engineering workflow (Gemini Coordinator -> Claude Spec -> Codex Implementation -> Claude + Grok Dual-Track QA) with unified 6-platform CLI/IDE configuration sync.
+Multi-model Antigravity Swarm engineering workflow (Grok Coordinator -> Claude Spec -> Claude + Gemini Implementation -> Codex Review) with unified 6-platform CLI/IDE configuration sync.

@@ -1,6 +1,6 @@
 interface:
   display_name: "cc-swarm-workflow"
   short_description: >-
-    Antigravity Swarm 四階段多模型協作工作流（Gemini 指揮協調 → Claude 技術規格 → Codex 核心開發 → Claude+Grok 雙軌交叉驗收）的標準產物契約與交接規範。
+    Antigravity Swarm 四階段多模型協作工作流（Grok 指揮 → Claude 規格 → Claude+Gemini 開發 → Codex 單一驗收）的標準產物契約與交接規範。
 policy:
   allow_implicit_invocation: true

@@ -8,10 +8,10 @@ applyTo: "**"
 
 ## 多模型 Swarm 協作流程
 
-1. **指揮協調 (Gemini)**：拆解需求、管理看板與階段交接。
+1. **指揮協調 (Grok)**：拆解需求、判斷風險等級、檔案分工。
 2. **技術文檔與規格 (Claude)**：產出 `docs/specs/<feature>.spec.md`，鎖定 API 契約、DB Schema 與驗收標準。
-3. **核心代碼開發 (Codex)**：依據 `.spec.md` 實作代碼與單元測試，輸出變更清單與測試證據 `docs/specs/<feature>.impl.md`。
-4. **雙軌交叉驗收 (Claude + Grok)**：Claude 審查架構與 API 契約一致性，Grok 進行紅隊邊界、併發與漏洞壓力測試，雙軌通過後方可交付。
+3. **開發 (Claude + Gemini)**：Claude 做核心與高風險部分，Gemini 做 frontend、低風險後端、測試與文件，輸出 `docs/specs/<feature>.impl.md`。
+4. **驗收 (Codex)**：單一關審查契約與邊界反例，僅高風險加紅隊；通過後方可交付。
 
 ## 工作方式與品質底線
 

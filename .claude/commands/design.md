@@ -3,7 +3,7 @@ description: 技術規格設計（Swarm Stage 2 - Claude 架構師：產出 docs
 argument-hint: "[doc|checklist] 功能描述"
 ---
 
-> **Swarm Stage 2（Claude 技術文檔與規格設計）**：本命令由 Claude 架構師（推薦 `claude-opus-5-5[1m]`）執行，為後續 Codex 開發（Stage 3）與 Claude+Grok 雙軌驗收（Stage 4）建立唯一真實規格契約。
+> **Swarm Stage 2（Claude 技術文檔與規格設計）**：本命令由 Claude 架構師（推薦 `claude-opus-5-5[1m]`）執行，為後續開發（Stage 3）與驗收（Stage 4）建立唯一真實規格契約。
 
 根據參數選擇設計模式：
 
@@ -28,7 +28,7 @@ argument-hint: "[doc|checklist] 功能描述"
 - **作者**：Jacky
 - **版本**：v1.0
 - **日期**：[當前日期]
-- **狀態**：`READY_FOR_CODEX`
+- **狀態**：`READY_FOR_DEV`
 
 ---
 
@@ -36,7 +36,7 @@ argument-hint: "[doc|checklist] 功能描述"
 
 - **業務目標**：[簡要描述功能的業務背景與解決的核心問題]
 - **In-Scope（本次必做）**：[明確列出本次變更範圍]
-- **Out-of-Scope（本次不做，防止 Codex 過度重構）**：[明確排除無關模組]
+- **Out-of-Scope（本次不做，防止開發者過度重構）**：[明確排除無關模組]
 
 ---
 
@@ -64,7 +64,7 @@ argument-hint: "[doc|checklist] 功能描述"
 
 ---
 
-### 五、檔案拆分與實作清單（供 Stage 3 Codex 執行）
+### 五、檔案拆分與實作清單（供 Stage 3 開發者執行，標明每檔由誰改）
 
 | 檔案路徑 | 變更類型 (新增/修改) | 職責說明 | 預估行數 (須符合上限) |
 |----------|----------------------|----------|-----------------------|
@@ -72,9 +72,9 @@ argument-hint: "[doc|checklist] 功能描述"
 
 ---
 
-### 六、雙軌驗收標準 (Acceptance Criteria — 供 Stage 4 Claude + Grok 驗收)
+### 六、驗收標準 (Acceptance Criteria — 供 Stage 4 驗收，並註明檔案分工與風險等級)
 
 - [ ] **AC-1（核心功能與契約）**：...
-- [ ] **AC-2（極端邊界與空值防禦 — Grok 重點檢查）**：Null/空集合、超長輸入、時區與精度邊界
-- [ ] **AC-3（併發與冪等性 — Grok 重點檢查）**：重複提交、Race Condition、鎖與交易回滾
-- [ ] **AC-4（自動化測試要求）**：Codex 必須新增並跑過的單元測試 / 整合測試案例
+- [ ] **AC-2（極端邊界與空值防禦 — 驗收重點）**：Null/空集合、超長輸入、時區與精度邊界
+- [ ] **AC-3（併發與冪等性 — 驗收重點）**：重複提交、Race Condition、鎖與交易回滾
+- [ ] **AC-4（自動化測試要求）**：開發者必須新增並跑過的單元測試 / 整合測試案例

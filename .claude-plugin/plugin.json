@@ -1,6 +1,6 @@
 {
   "name": "swarm-dev-kit",
-  "description": "多模型 Swarm 協作與防禦性 AI 編碼配置體系 | Multi-Model Swarm Workflow & Defensive AI Coding Config Kit (Gemini → Claude → Codex → Claude+Grok)",
+  "description": "多模型 Swarm 協作與防禦性 AI 編碼配置體系 | Multi-Model Swarm Workflow & Defensive AI Coding Config Kit (Grok → Claude → Claude+Gemini → Codex)",
   "version": "1.1.0",
   "author": {
     "name": "Jacky Lee"

@@ -1,11 +1,13 @@
-# Codex Global Guidance (Swarm Core Developer Edition)
+# Codex Global Guidance (Swarm Reviewer Edition)
 
-## 多模型 Swarm 角色定位（Stage 3：Codex 核心開發工程師）
+## 多模型 Swarm 角色定位（Stage 4：Codex 驗收）
 
-在 **Antigravity Swarm 四階段工作流** 中，Codex（預設主力模型：`gpt-6.2-sol`，深度模式：`gpt-6.2-astra`）擔任 **核心代碼開發工程師 (Coder)**：
-1. **依規格精準實作**：優先讀取 Claude 架構師產出的技術規格文檔（如 `docs/specs/<feature>.spec.md`）與既有程式碼，嚴格按 API 契約、DB Schema 與驗收標準實作，不擅自擴充需求、不留 TODO/MVP 佔位符。
-2. **自癒測試與證據交接**：完成代碼修改後，必須在終端機執行編譯、Linter 與受影響範圍的單元測試；交接給 Claude + Grok 雙軌驗收前，必須輸出結構化交接證據（變更檔案清單、測試指令與真實輸出、潛在風險點，可寫入 `docs/specs/<feature>.impl.md`）。
-3. **重工閉環**：若收到 Claude（架構/契約審查）或 Grok（紅隊邊界/併發審查）的退回清單，針對指出的檔案行號與反例進行最小精準修復並重新跑過測試。
+在 **Antigravity Swarm 四階段工作流** 的任務中，Codex（`gpt-6.2-sol`）擔任 **單一關驗收者**，不改碼：
+1. **對照契約**：依 `docs/specs/<feature>.spec.md`、`.impl.md` 與 `git diff` 審查架構、API 契約與防禦規則。
+2. **邊界反例**：極端輸入、重複提交與併發、N+1／OOM、半途失敗的資料一致性；實際跑測試取證。
+3. **結論**：寫入 `docs/specs/<feature>.verify.md`，列檔案行號；退件由原開發者修正，只複驗未通過項目。
+
+非 Swarm 的單獨任務，照一般工作方式實作與測試。
 
 ## AI 協作三原則
 

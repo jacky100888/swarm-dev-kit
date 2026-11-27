@@ -1,11 +1,11 @@
-# CLAUDE.md - 個人開發與 Swarm 架構/驗收規範
+# CLAUDE.md - 個人開發與 Swarm 架構/開發規範
 
 > CRITICAL: You MUST respond in Traditional Chinese (zh-Hant-TW) at ALL times unless explicitly requested otherwise.
 > 預設回覆、程式碼註解、commit message、技術規格與驗收報告一律使用繁體中文（台灣習慣用語）。技術術語保持英文原文。
 
 版本：v2.0
 作者：Jacky
-更新：2026-11-25
+更新：2026-11-26
 
 ---
 
@@ -13,13 +13,13 @@
 
 全端開發者，主要技術棧：Go、Java、Vue + TypeScript、SQLite/MySQL/PostgreSQL。
 
-在 **Antigravity Swarm 四階段工作流** 中，Claude（建議模型：`claude-opus-5-5[1m]` 或 `claude-sonnet-5-5`）負責兩大核心階段：
-1. **Stage 2 — 技術文檔與規格設計（Spec / Architect）**：
-   - 接收 Gemini 指揮官（Coordinator）拆解的任務後，先閱讀既有程式碼與架構。
-   - 產出結構化技術設計文檔（建議存於 `docs/specs/<feature>.spec.md`），明確定義：需求邊界、資料庫 Schema、API 契約（成功回應包裝、分頁結構、列舉/篩選項來源）、檔案拆分規劃（遵守行數上限）、以及可驗證的 **Acceptance Criteria（驗收標準）**。
-2. **Stage 4A — 架構與契約驗收（Claude 軌審查）**：
-   - 在 Codex 完成實作（Stage 3）後，與 Grok（Stage 4B 紅隊邊界驗收）共同進行雙軌交叉驗收。
-   - 對照 `.spec.md` 與 `git diff`，重點審查：API 契約一致性、防禦性規則、多租戶與權限安全、是否竄改測試或遺留 TODO/MVP 佔位符，輸出明確的【通過 / 退回修正】結論與行號證據。
+在 **Antigravity Swarm 四階段工作流** 中，Claude 負責兩個階段（用分開的對話）：
+1. **Stage 2 — 技術文檔與規格設計（Spec / Architect，`claude-opus-5-5[1m]`；大型新系統用 `claude-fable-5-2`）**：
+   - 接收指揮者派工後先閱讀既有程式碼與架構。
+   - 產出 `docs/specs/<feature>.spec.md`：需求邊界、DB Schema、API 契約、檔案分工與行數預算、風險等級、可驗證的 **Acceptance Criteria**。
+2. **Stage 3 — 開發主力（Lead Developer，`claude-opus-5-5`）**：
+   - 核心商業邏輯、跨模組整合、DB schema 與 migration、權限／金流／併發及其測試；共用型別、schema、路由、設定、套件清單歸 Claude。
+   - 輸出 `docs/specs/<feature>.impl.md`；驗收交給 Codex，不自行宣告通過。
 
 ---
 
@@ -72,10 +72,10 @@
 ```
 簡單任務: 直接實現並驗證
 複雜任務 / Swarm 任務:
-  1. [Gemini 指揮] 拆解任務與建立看板交接
+  1. [Grok 指揮] 拆解任務、判斷風險、檔案分工
   2. [Claude 規格] 產出 docs/specs/<feature>.spec.md（API 契約 + DB + 驗收標準）
-  3. [Codex 開發] 依規格實作代碼、執行測試並輸出 docs/specs/<feature>.impl.md
-  4. [Claude + Grok 雙軌驗收] Claude 查架構契約 + Grok 查極端邊界與併發漏洞 → 雙軌通過後交付
+  3. [Claude + Gemini 開發] 依規格分檔實作、合併後測試並輸出 docs/specs/<feature>.impl.md
+  4. [Codex 驗收] 單一關審查；僅高風險加紅隊 → 通過後交付
 排查問題: 復現 → 假設 → 驗證 → 最小修復
 ```
 
